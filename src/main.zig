@@ -16,7 +16,24 @@ const command = .{
 
 const log = std.log.scoped(.app);
 
-pub const std_options: std.Options = .{ .log_level = .info };
+// кастомизация логгирования чтобы можно было менять через аргументы командной строки
+pub const std_options: std.Options = .{
+    .log_level = .debug,
+    .logFn = logFn,
+};
+// уровень по умолчанию будет только с ошибками
+var log_level: std.log.Level = .err;
+
+fn logFn(
+    comptime message_level: std.log.Level,
+    comptime scope: @TypeOf(.enum_literal),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    if (@intFromEnum(message_level) <= @intFromEnum(log_level)) {
+        std.log.defaultLog(message_level, scope, format, args);
+    }
+}
 
 // TODO: обработка ошибок
 pub fn main(init: std.process.Init) !void {
@@ -32,7 +49,8 @@ pub fn main(init: std.process.Init) !void {
     var arguments = arg.setupArgs(init) catch return;
     defer arguments.deinit();
 
-    // буфер для rpc
+    log_level = arguments.level;
+
     const buffer = try gpa.alloc(u8, 65536);
     defer gpa.free(buffer);
 

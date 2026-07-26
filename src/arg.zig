@@ -26,13 +26,23 @@ pub const Command = enum {
 pub const Args = struct {
     parser: args.ArgumentParser,
     result: args.ParseResult,
+    level: std.log.Level,
     command: Command,
 
-    pub fn deinit(self: *@This()) void {
+    pub fn deinit(self: *Args) void {
         self.result.deinit();
         self.parser.deinit();
     }
 };
+
+fn parseLogLevel(value: []const u8) std.log.Level {
+    if (std.mem.eql(u8, value, "err")) return .err;
+    if (std.mem.eql(u8, value, "warn")) return .warn;
+    if (std.mem.eql(u8, value, "info")) return .info;
+    if (std.mem.eql(u8, value, "debug")) return .debug;
+    // по умолчанию
+    return .err;
+}
 
 // https://muhammad-fiaz.github.io/args.zig/
 pub fn setupArgs(init: std.process.Init) !Args {
@@ -55,6 +65,11 @@ pub fn setupArgs(init: std.process.Init) !Args {
         .min = 1,
         .max = 65535,
         .help = "Transmission port",
+    });
+    try parser.addOption("level", .{
+        .short = 'l',
+        .help = "Log level",
+        .choices = &[_][]const u8{ "err", "warn", "info", "debug" },
     });
 
     try parser.addSubcommand(.{
@@ -144,5 +159,6 @@ pub fn setupArgs(init: std.process.Init) !Args {
         .parser = parser,
         .result = result,
         .command = command.?,
+        .level = parseLogLevel(result.getOrString("level", "err")),
     };
 }
