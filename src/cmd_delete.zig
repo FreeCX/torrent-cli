@@ -15,7 +15,7 @@ pub fn delete(gpa: mem.Allocator, stdout: *Io.Writer, raw_ids: ?[]const []const 
     _ = try rpc.torrentDelete(ids);
 
     for (torrents) |torrent| {
-        try stdout.print("- | {d} | {s}\n", .{ torrent.id, torrent.name });
+        try stdout.print("× | {d} | {s}\n", .{ torrent.id, torrent.name });
     }
     try stdout.flush();
 }
