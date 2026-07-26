@@ -1,5 +1,3 @@
-// https://www.definitepotato.dev/posts/20260208-zig-http/
-
 const std = @import("std");
 const mem = std.mem;
 const http = std.http;
@@ -55,10 +53,9 @@ pub const AddInfo = struct {
 };
 const TorrentAddResult = struct { torrent_added: AddInfo };
 const TorrentAddResponse = struct { id: u64, jsonrpc: []u8, result: TorrentAddResult };
-const Response = struct {
-    body: []u8,
-    status: http.Status,
-};
+
+// part of http response
+const MiniResponse = struct { body: []u8, status: http.Status };
 
 pub fn init(io: Io, gpa: mem.Allocator, host: []const u8, port: u16, buf: []u8) !void {
     uri = std.Uri{
@@ -75,8 +72,8 @@ pub fn deinit() void {
     client.deinit();
 }
 
-fn doRequest(data: anytype) !Response {
-    log.debug("---", .{});
+fn doRequest(method: []const u8, params: anytype) !MiniResponse {
+    log.debug("--- new request ---", .{});
     // construct request
     var request = try client.request(.POST, uri, .{
         .headers = .{
@@ -92,25 +89,25 @@ fn doRequest(data: anytype) !Response {
     defer request.deinit();
 
     // send head + body
-    const body = try jsonify(data);
-    log.debug("request: {s}", .{body});
+    const body = try jsonify(.{ .id = nextId(), .jsonrpc = "2.0", .method = method, .params = params });
+    log.debug("request={s}", .{body});
     _ = try request.sendBodyComplete(body);
 
     // responce headers
     var response = try request.receiveHead(buffer);
-    log.debug("status_code = {any}", .{response.head.status});
+    log.debug("status_code={any}", .{response.head.status});
     if (response.head.status == .conflict) {
         log.debug("409 occured", .{});
         var it = response.head.iterateHeaders();
         while (it.next()) |header| {
             if (mem.eql(u8, header.name, session_id_key)) {
-                log.debug("update session_id to {s}", .{header.value});
+                log.debug("session_id={s}", .{header.value});
                 session_id_len = header.value.len;
                 @memcpy(session_id[0..session_id_len], header.value);
             }
         }
         // TODO: сделать нормальную retry policy
-        return doRequest(data);
+        return doRequest(method, params);
     }
 
     if (response.head.content_length == null) {
@@ -120,11 +117,15 @@ fn doRequest(data: anytype) !Response {
     // response body
     var transfer_buffer: [64]u8 = undefined;
     var decompress: http.Decompress = undefined;
-    const reader = response.readerDecompressing(&transfer_buffer, &decompress, &decompress_buffer);
+    const reader = response.readerDecompressing(
+        &transfer_buffer,
+        &decompress,
+        &decompress_buffer,
+    );
     const readed = try reader.readSliceShort(buffer);
-    log.debug("response: {s}", .{buffer[0..readed]});
+    log.debug("response={s}", .{buffer[0..readed]});
 
-    return Response{ .body = buffer[0..readed], .status = response.head.status };
+    return MiniResponse{ .body = buffer[0..readed], .status = response.head.status };
 }
 
 fn nextId() u64 {
@@ -144,17 +145,12 @@ fn jsonify(data: anytype) ![]u8 {
 }
 
 pub fn torrentStatus(gpa: std.mem.Allocator, ids: ?[]u32) ![]StatusInfo {
-    const request = .{
-        .id = nextId(),
-        .jsonrpc = "2.0",
-        .method = "torrent_get",
-        .params = .{
-            .ids = ids,
-            .fields = .{ "id", "name", "status", "rate_download", "rate_upload", "percent_done" },
-        },
+    const params = .{
+        .ids = ids,
+        .fields = .{ "id", "name", "status", "rate_download", "rate_upload", "percent_done" },
     };
 
-    const response = try doRequest(request);
+    const response = try doRequest("torrent_get", params);
     const parsed = try json.parseFromSlice(
         TorrentStatusResponse,
         gpa,
@@ -183,13 +179,8 @@ pub fn torrentAdd(gpa: std.mem.Allocator, filename: ?[]const u8, metainfo: ?[]co
         metainfo_encoded = codec.Encoder.encode(encoded, metainfo.?);
     }
 
-    const request = .{
-        .id = nextId(),
-        .jsonrpc = "2.0",
-        .method = "torrent_add",
-        .params = .{ .metainfo = metainfo_encoded, .filename = filename },
-    };
-    const response = try doRequest(request);
+    const params = .{ .metainfo = metainfo_encoded, .filename = filename };
+    const response = try doRequest("torrent_add", params);
 
     if (metainfo != null) {
         gpa.free(encoded);
@@ -210,25 +201,20 @@ pub fn torrentAdd(gpa: std.mem.Allocator, filename: ?[]const u8, metainfo: ?[]co
     };
 }
 
-fn torrentAnyWithParams(method: []const u8, params: anytype) !bool {
-    const request = .{
-        .id = nextId(),
-        .jsonrpc = "2.0",
-        .method = method,
-        .params = params,
-    };
-    const response = try doRequest(request);
+pub fn torrentStart(ids: ?[]u32) !bool {
+    const response = try doRequest("torrent_start", .{ .ids = ids });
     return response.status == .ok;
 }
 
-pub fn torrentStart(ids: ?[]u32) !bool {
-    return try torrentAnyWithParams("torrent_start", .{ .ids = ids });
-}
-
 pub fn torrentStop(ids: ?[]u32) !bool {
-    return try torrentAnyWithParams("torrent_stop", .{ .ids = ids });
+    const response = try doRequest("torrent_stop", .{ .ids = ids });
+    return response.status == .ok;
 }
 
 pub fn torrentDelete(ids: ?[]u32) !bool {
-    return try torrentAnyWithParams("torrent_remove", .{ .ids = ids, .delete_local_data = false });
+    const response = try doRequest(
+        "torrent_remove",
+        .{ .ids = ids, .delete_local_data = false },
+    );
+    return response.status == .ok;
 }
