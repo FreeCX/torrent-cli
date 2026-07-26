@@ -74,7 +74,7 @@ pub fn setupArgs(init: std.process.Init) !Args {
 
     try parser.addSubcommand(.{
         .name = "add",
-        .help = "Add torrent file/url",
+        .help = "Add torrent",
         .args = &[_]args.ArgSpec{
             .{
                 .name = "path",
@@ -82,14 +82,14 @@ pub fn setupArgs(init: std.process.Init) !Args {
                 .long = "path",
                 .value_type = .path,
                 .conflicts_with = &.{"magnet"},
-                .help = "Add torrent from file/folder",
+                .help = "From file/folder",
             },
             .{
                 .name = "magnet",
                 .short = 'm',
                 .long = "magnet",
                 .conflicts_with = &.{"path"},
-                .help = "Add magnet url",
+                .help = "From magnet url",
             },
         },
     });
@@ -104,7 +104,7 @@ pub fn setupArgs(init: std.process.Init) !Args {
                 .long = "id",
                 .nargs = .zero_or_more,
                 .value_type = .array,
-                .help = "Start by id(s)",
+                .help = "By ids",
             },
         },
     });
@@ -119,7 +119,7 @@ pub fn setupArgs(init: std.process.Init) !Args {
                 .long = "id",
                 .nargs = .zero_or_more,
                 .value_type = .array,
-                .help = "Stop by id(s)",
+                .help = "By ids",
             },
         },
     });
@@ -134,14 +134,14 @@ pub fn setupArgs(init: std.process.Init) !Args {
                 .long = "id",
                 .nargs = .zero_or_more,
                 .value_type = .array,
-                .help = "Delete by id(s)",
+                .help = "By ids",
             },
         },
     });
 
     try parser.addSubcommand(.{
         .name = "status",
-        .help = "Get torrent statuses",
+        .help = "Show torrent stats",
         // TODO: не работает
         .aliases = &[_][]const u8{ "s", "stat" },
     });

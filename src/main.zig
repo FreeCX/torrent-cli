@@ -40,24 +40,21 @@ pub fn main(init: std.process.Init) !void {
     const gpa = init.gpa;
     const io = init.io;
 
-    // setup stdout
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_file_writer: Io.File.Writer = .init(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_file_writer.interface;
 
-    // настройка и парсинг аргументов
     var arguments = arg.setupArgs(init) catch return;
     defer arguments.deinit();
 
     log_level = arguments.level;
 
-    const buffer = try gpa.alloc(u8, 65536);
-    defer gpa.free(buffer);
+    const rpc_buffer = try gpa.alloc(u8, 65536);
+    defer gpa.free(rpc_buffer);
 
-    // connect
     const host = arguments.result.getOrString("host", "127.0.0.1");
     const port: u16 = @intCast(arguments.result.getOrUint("port", 9091));
-    try rpc.init(io, gpa, host, port, buffer);
+    try rpc.init(io, gpa, host, port, rpc_buffer);
     defer rpc.deinit();
 
     switch (arguments.command) {
