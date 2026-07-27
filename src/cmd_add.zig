@@ -16,7 +16,7 @@ fn isDirectory(io: Io, path: []const u8) !bool {
 pub fn add(gpa: mem.Allocator, io: Io, stdout: *Io.Writer, path: ?[]const u8, magnet: ?[]const u8) !void {
     if (path != null) {
         if (try isDirectory(io, path.?)) {
-            // обходи директории и добавление *.torrent файлов
+            // walk over dir and add *.torrent files
             const dir = try std.Io.Dir.cwd().openDir(
                 io,
                 path.?,
@@ -44,7 +44,7 @@ pub fn add(gpa: mem.Allocator, io: Io, stdout: *Io.Writer, path: ?[]const u8, ma
             return;
         }
 
-        // добавление одного файла
+        // add one file
         const response = try rpc.torrentAdd(gpa, path.?, null);
         defer response.deinit(gpa);
         try stdout.print("+ | {d} | {s}\n", .{ response.id, response.name });
@@ -53,7 +53,7 @@ pub fn add(gpa: mem.Allocator, io: Io, stdout: *Io.Writer, path: ?[]const u8, ma
     }
 
     if (magnet != null) {
-        // добавление магнет ссылки
+        // add magnet url
         const response = try rpc.torrentAdd(gpa, magnet, null);
         defer response.deinit(gpa);
         try stdout.print("+ | {d} | {s}\n", .{ response.id, response.name });

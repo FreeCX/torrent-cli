@@ -106,7 +106,7 @@ fn doRequest(method: []const u8, params: anytype) !MiniResponse {
                 @memcpy(session_id[0..session_id_len], header.value);
             }
         }
-        // TODO: сделать нормальную retry policy
+        // TODO: need a better retry policy
         return doRequest(method, params);
     }
 

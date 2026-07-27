@@ -16,12 +16,12 @@ const command = .{
 
 const log = std.log.scoped(.app);
 
-// кастомизация логгирования чтобы можно было менять через аргументы командной строки
+// custom loging, because .log_level cannot be changed after compilation
 pub const std_options: std.Options = .{
     .log_level = .debug,
     .logFn = logFn,
 };
-// уровень по умолчанию будет только с ошибками
+// customizable log level
 var log_level: std.log.Level = .err;
 
 fn logFn(
@@ -35,7 +35,7 @@ fn logFn(
     }
 }
 
-// TODO: обработка ошибок
+// TODO: better error handling
 pub fn main(init: std.process.Init) !void {
     const gpa = init.gpa;
     const io = init.io;

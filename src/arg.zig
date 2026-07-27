@@ -40,7 +40,7 @@ fn parseLogLevel(value: []const u8) std.log.Level {
     if (std.mem.eql(u8, value, "warn")) return .warn;
     if (std.mem.eql(u8, value, "info")) return .info;
     if (std.mem.eql(u8, value, "debug")) return .debug;
-    // по умолчанию
+    // default log level
     return .err;
 }
 
@@ -142,7 +142,7 @@ pub fn setupArgs(init: std.process.Init) !Args {
     try parser.addSubcommand(.{
         .name = "status",
         .help = "Show torrent stats",
-        // TODO: не работает
+        // TODO: aliases just doesn't work
         .aliases = &[_][]const u8{ "s", "stat" },
     });
 
