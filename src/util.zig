@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub fn processIds(gpa: std.mem.Allocator, T: type, items: ?[]const []const u8) !?[]T {
+pub fn parseIds(gpa: std.mem.Allocator, T: type, items: ?[]const []const u8) !?[]T {
     if (items == null) return null;
 
     var result = try gpa.alloc(T, items.?.len);

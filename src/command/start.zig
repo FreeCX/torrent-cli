@@ -2,11 +2,11 @@ const std = @import("std");
 const mem = std.mem;
 const Io = std.Io;
 
-const rpc = @import("rpc.zig");
-const util = @import("util.zig");
+const rpc = @import("../rpc.zig");
+const util = @import("../util.zig");
 
 pub fn start(gpa: mem.Allocator, stdout: *Io.Writer, raw_ids: ?[]const []const u8) !void {
-    const ids = try util.processIds(gpa, u32, raw_ids);
+    const ids = try util.parseIds(gpa, u32, raw_ids);
     defer if (ids != null) gpa.free(ids.?);
 
     const torrents = try rpc.torrentStatus(gpa, ids);

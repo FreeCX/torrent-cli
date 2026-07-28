@@ -7,16 +7,16 @@ const rpc = @import("rpc.zig");
 const arg = @import("arg.zig");
 
 const command = .{
-    .add = @import("cmd_add.zig").add,
-    .delete = @import("cmd_delete.zig").delete,
-    .start = @import("cmd_start.zig").start,
-    .stop = @import("cmd_stop.zig").stop,
-    .status = @import("cmd_status.zig").status,
+    .add = @import("command/add.zig").add,
+    .delete = @import("command/delete.zig").delete,
+    .start = @import("command/start.zig").start,
+    .stop = @import("command/stop.zig").stop,
+    .status = @import("command/status.zig").status,
 };
 
 const log = std.log.scoped(.app);
 
-// custom loging, because .log_level cannot be changed after compilation
+// custom logging, because .log_level cannot be changed after compilation
 pub const std_options: std.Options = .{
     .log_level = .debug,
     .logFn = logFn,

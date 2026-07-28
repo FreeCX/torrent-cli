@@ -2,7 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 const Io = std.Io;
 
-const rpc = @import("rpc.zig");
+const rpc = @import("../rpc.zig");
 
 fn statusAsSymbol(stat: rpc.Status) []const u8 {
     return switch (stat) {
