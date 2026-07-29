@@ -4,6 +4,8 @@ const Io = std.Io;
 
 const rpc = @import("../rpc.zig");
 
+var buffer: [64]u8 = undefined;
+
 fn statusAsSymbol(stat: rpc.Status) []const u8 {
     return switch (stat) {
         .Downloading => "↓",
@@ -15,7 +17,6 @@ fn statusAsSymbol(stat: rpc.Status) []const u8 {
 }
 
 fn renderProgressBar(percent: u8) []u8 {
-    var buffer: [64]u8 = undefined;
     const filler = @divTrunc(percent, 10);
     const spacer = 10 - filler;
     var writer = Io.Writer.fixed(&buffer);
