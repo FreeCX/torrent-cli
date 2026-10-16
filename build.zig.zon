@@ -3,11 +3,11 @@
     .version = "0.1.0",
     .description = "Simple transmission rpc client",
     .fingerprint = 0xf64b6e63274430fe,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .args = .{
-            .url = "https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.7.tar.gz",
-            .hash = "args-0.0.7-8hzgbvPiCAAcEM4R90pCppGhHBKi0Uiw90tbGvipjVfc",
+            .url = "https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.9.tar.gz",
+            .hash = "args-0.0.9-8hzgbh4KCgB9UYVNvr6R_GmZgq7j1DpV2kGcqn3F36Q1",
         },
     },
     .paths = .{

@@ -50,7 +50,6 @@ pub fn setupArgs(init: std.process.Init) !Args {
         .name = @tagName(app.name),
         .version = app.version,
         .description = app.description,
-        .config = .{ .check_for_updates = false, .show_update_notification = false },
     });
     errdefer parser.deinit();
 

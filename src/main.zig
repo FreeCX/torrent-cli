@@ -30,7 +30,7 @@ fn logFn(
     comptime format: []const u8,
     args: anytype,
 ) void {
-    if (@intFromEnum(message_level) <= @intFromEnum(log_level)) {
+    if (@backingInt(message_level) <= @backingInt(log_level)) {
         std.log.defaultLog(message_level, scope, format, args);
     }
 }
