@@ -1,7 +1,5 @@
 const std = @import("std");
-const mem = std.mem;
 const Io = std.Io;
-const net = Io.net;
 
 const rpc = @import("rpc.zig");
 const arg = @import("arg.zig");
@@ -54,7 +52,7 @@ pub fn main(init: std.process.Init) !void {
 
     const host = arguments.result.getOrString("host", "127.0.0.1");
     const port: u16 = @intCast(arguments.result.getOrUint("port", 9091));
-    try rpc.init(io, gpa, host, port, rpc_buffer);
+    rpc.init(io, gpa, host, port, rpc_buffer);
     defer rpc.deinit();
 
     switch (arguments.command) {

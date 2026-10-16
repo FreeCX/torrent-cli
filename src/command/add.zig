@@ -4,12 +4,10 @@ const Io = std.Io;
 
 const rpc = @import("../rpc.zig");
 
-const log = std.log.scoped(.add);
-
 var buffer: [4096]u8 = undefined;
 
 fn isDirectory(io: Io, path: []const u8) !bool {
-    const stat = try std.Io.Dir.cwd().statFile(io, path, .{});
+    const stat = try Io.Dir.cwd().statFile(io, path, .{});
     return stat.kind == .directory;
 }
 
@@ -17,7 +15,7 @@ pub fn add(gpa: mem.Allocator, io: Io, stdout: *Io.Writer, path: ?[]const u8, ma
     if (path != null) {
         if (try isDirectory(io, path.?)) {
             // walk over dir and add *.torrent files
-            const dir = try std.Io.Dir.cwd().openDir(
+            const dir = try Io.Dir.cwd().openDir(
                 io,
                 path.?,
                 .{ .iterate = true },
@@ -28,7 +26,7 @@ pub fn add(gpa: mem.Allocator, io: Io, stdout: *Io.Writer, path: ?[]const u8, ma
             defer walker.deinit();
 
             while (try walker.next(io)) |entry| {
-                if (std.mem.endsWith(u8, entry.basename, ".torrent")) {
+                if (mem.endsWith(u8, entry.basename, ".torrent")) {
                     const filename = try std.fmt.bufPrint(
                         &buffer,
                         "{s}/{s}",

@@ -141,8 +141,6 @@ pub fn setupArgs(init: std.process.Init) !Args {
     try parser.addSubcommand(.{
         .name = "status",
         .help = "Show torrent stats",
-        // TODO: aliases just doesn't work
-        .aliases = &[_][]const u8{ "s", "stat" },
     });
 
     var result = try parser.parseProcess(init);

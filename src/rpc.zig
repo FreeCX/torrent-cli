@@ -1,9 +1,8 @@
 const std = @import("std");
+const Io = std.Io;
 const mem = std.mem;
 const http = std.http;
 const json = std.json;
-const Io = std.Io;
-const net = Io.net;
 
 const RpcClient = @This();
 const log = std.log.scoped(.rpc);
@@ -57,7 +56,7 @@ const TorrentAddResponse = struct { id: u64, jsonrpc: []u8, result: TorrentAddRe
 // part of http response
 const MiniResponse = struct { body: []u8, status: http.Status };
 
-pub fn init(io: Io, gpa: mem.Allocator, host: []const u8, port: u16, buf: []u8) !void {
+pub fn init(io: Io, gpa: mem.Allocator, host: []const u8, port: u16, buf: []u8) void {
     uri = std.Uri{
         .scheme = "http",
         .host = .{ .percent_encoded = host },
@@ -144,7 +143,7 @@ fn jsonify(data: anytype) ![]u8 {
     return buffer[0..writer.end];
 }
 
-pub fn torrentStatus(gpa: std.mem.Allocator, ids: ?[]u32) ![]StatusInfo {
+pub fn torrentStatus(gpa: mem.Allocator, ids: ?[]u32) ![]StatusInfo {
     const params = .{
         .ids = ids,
         .fields = .{ "id", "name", "status", "rate_download", "rate_upload", "percent_done" },
@@ -167,7 +166,7 @@ pub fn torrentStatus(gpa: std.mem.Allocator, ids: ?[]u32) ![]StatusInfo {
     return duped;
 }
 
-pub fn torrentAdd(gpa: std.mem.Allocator, filename: ?[]const u8, metainfo: ?[]const u8) !AddInfo {
+pub fn torrentAdd(gpa: mem.Allocator, filename: ?[]const u8, metainfo: ?[]const u8) !AddInfo {
     if (filename != null and metainfo != null) {
         return error.MultipleFieldsProvided;
     }
