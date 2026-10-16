@@ -160,6 +160,10 @@ pub fn torrentStatus(gpa: std.mem.Allocator, ids: ?[]u32) ![]StatusInfo {
     defer parsed.deinit();
 
     const duped = try gpa.dupe(StatusInfo, parsed.value.result.torrents);
+    errdefer gpa.free(duped);
+    for (duped) |*item| {
+        item.name = try gpa.dupe(u8, item.name);
+    }
     return duped;
 }
 

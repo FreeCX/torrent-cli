@@ -27,7 +27,12 @@ fn renderProgressBar(percent: u8) []u8 {
 
 pub fn status(gpa: mem.Allocator, stdout: *Io.Writer) !void {
     const torrents = try rpc.torrentStatus(gpa, null);
-    defer gpa.free(torrents);
+    defer {
+        for (torrents) |t| {
+            gpa.free(t.name);
+        }
+        gpa.free(torrents);
+    }
 
     for (torrents) |torrent| {
         const percent: u8 = @trunc(torrent.percent_done * 100);
