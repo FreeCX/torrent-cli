@@ -202,7 +202,12 @@ pub fn torrentAdd(gpa: mem.Allocator, filename: ?[]const u8, metainfo: ?[]const 
     }
 
     const params = .{ .metainfo = metainfo_encoded, .filename = filename };
-    const response = try doRequest("torrent_add", params);
+    const response = doRequest("torrent_add", params) catch |err| {
+        if (metainfo != null) {
+            gpa.free(encoded);
+        }
+        return err;
+    };
 
     if (metainfo != null) {
         gpa.free(encoded);
