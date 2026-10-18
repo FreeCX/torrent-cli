@@ -18,6 +18,15 @@ var session_id_len: usize = 0;
 
 const session_id_key = "X-Transmission-Session-Id";
 
+// base json with custom result
+fn TorrentBase(T: type) type {
+    return struct {
+        id: u64,
+        jsonrpc: []u8,
+        result: T,
+    };
+}
+
 // torrent get
 pub const Status = enum(u8) {
     Stopped = 0,
@@ -37,13 +46,15 @@ pub const StatusInfo = struct {
     status: Status,
 };
 const TorrentStatusResult = struct { torrents: []StatusInfo };
-const TorrentStatusResponse = struct { id: u64, jsonrpc: []u8, result: TorrentStatusResult };
+const TorrentStatusResponse = TorrentBase(TorrentStatusResult);
 
 // torrent add
+const TorrentAddInfo = struct { id: u64, name: []u8, hash_string: []u8 };
 pub const AddInfo = struct {
     id: u64,
     name: []u8,
     hash_string: []u8,
+    is_duplicate: bool,
 
     pub fn deinit(self: AddInfo, gpa: mem.Allocator) void {
         gpa.free(self.name);
@@ -51,7 +62,7 @@ pub const AddInfo = struct {
     }
 };
 const TorrentAddResult = struct { torrent_added: AddInfo };
-const TorrentAddResponse = struct { id: u64, jsonrpc: []u8, result: TorrentAddResult };
+const TorrentAddResponse = TorrentBase(TorrentAddResult);
 
 // part of http response
 const MiniResponse = struct { body: []u8, status: http.Status };
