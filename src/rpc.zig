@@ -116,15 +116,14 @@ fn doRequest(method: []const u8, params: anytype) !MiniResponse {
             if (mem.eql(u8, header.name, session_id_key)) {
                 log.debug("session_id={s}", .{header.value});
                 session_id_len = header.value.len;
+                if (session_id_len > session_id.len) {
+                    return error.SessionIdTooLong;
+                }
                 @memcpy(session_id[0..session_id_len], header.value);
             }
         }
         // TODO: need a better retry policy
         return doRequest(method, params);
-    }
-
-    if (response.head.content_length == null) {
-        return error.MissingBody;
     }
 
     // response body
@@ -136,6 +135,12 @@ fn doRequest(method: []const u8, params: anytype) !MiniResponse {
         &decompress_buffer,
     );
     const readed = try reader.readSliceShort(buffer);
+    if (readed == 0) {
+        return error.MissingBody;
+    }
+    if (readed == buffer.len) {
+        return error.ResponseTooLarge;
+    }
     log.debug("response={s}", .{buffer[0..readed]});
 
     return MiniResponse{ .body = buffer[0..readed], .status = response.head.status };
