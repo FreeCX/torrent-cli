@@ -30,7 +30,8 @@ pub fn status(gpa: mem.Allocator, stdout: *Io.Writer) !void {
     defer stats.deinit(gpa);
 
     for (stats.items) |torrent| {
-        const percent: u8 = @trunc(torrent.percent_done * 100);
+        const percent_clamped = std.math.clamp(torrent.percent_done, 0.0, 1.0);
+        const percent: u8 = @trunc(percent_clamped * 100);
         try stdout.print("{d} | {s} | {s} {d:3}% | {d:0.2}↓ {d:0.2}↑ | {s}\n", .{
             torrent.id,
             statusAsSymbol(torrent.status),
