@@ -42,7 +42,10 @@ pub fn main(init: std.process.Init) !void {
     var stdout_file_writer: Io.File.Writer = .init(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_file_writer.interface;
 
-    var arguments = arg.setupArgs(init) catch return;
+    var arguments = arg.setupArgs(init) catch |err| switch (err) {
+        error.Exit => return,
+        else => return err,
+    };
     defer arguments.deinit();
 
     log_level = arguments.level;
