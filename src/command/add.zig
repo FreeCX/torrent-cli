@@ -4,16 +4,9 @@ const Io = std.Io;
 
 const rpc = @import("../rpc.zig");
 
-var buffer: [4096]u8 = undefined;
-
 fn isDirectory(io: Io, path: []const u8) !bool {
     const stat = try Io.Dir.cwd().statFile(io, path, .{});
     return stat.kind == .directory;
-}
-
-fn filePath(io: Io, path: []const u8) ![]u8 {
-    const size = try Io.Dir.cwd().realPathFile(io, path, &buffer);
-    return buffer[0..size];
 }
 
 fn isDuplicate(data: rpc.AddInfo) u8 {
@@ -36,14 +29,20 @@ pub fn add(gpa: mem.Allocator, io: Io, stdout: *Io.Writer, path: ?[]const u8, ma
 
             while (try walker.next(io)) |entry| {
                 if (mem.endsWith(u8, entry.basename, ".torrent")) {
-                    const filename = try std.fmt.bufPrint(
-                        &buffer,
+                    const filename = try std.fmt.allocPrint(
+                        gpa,
                         "{s}/{s}",
                         .{ path.?, entry.path },
                     );
+                    defer gpa.free(filename);
+
                     const response = try rpc.torrentAdd(gpa, filename, null);
                     defer response.deinit(gpa);
-                    try stdout.print("{c} | {d} | {s}\n", .{ isDuplicate(response), response.id, response.name });
+
+                    try stdout.print(
+                        "{c} | {d} | {s}\n",
+                        .{ isDuplicate(response), response.id, response.name },
+                    );
                 }
             }
             try stdout.flush();
@@ -52,12 +51,12 @@ pub fn add(gpa: mem.Allocator, io: Io, stdout: *Io.Writer, path: ?[]const u8, ma
         }
 
         // add one file
-        const response = try rpc.torrentAdd(
-            gpa,
-            try filePath(io, path.?),
-            null,
-        );
+        const filename = try Io.Dir.cwd().realPathFileAlloc(io, path.?, gpa);
+        defer gpa.free(filename);
+
+        const response = try rpc.torrentAdd(gpa, filename, null);
         defer response.deinit(gpa);
+
         try stdout.print("{c} | {d} | {s}\n", .{ isDuplicate(response), response.id, response.name });
         try stdout.flush();
         return;
@@ -67,6 +66,7 @@ pub fn add(gpa: mem.Allocator, io: Io, stdout: *Io.Writer, path: ?[]const u8, ma
         // add magnet url
         const response = try rpc.torrentAdd(gpa, magnet, null);
         defer response.deinit(gpa);
+
         try stdout.print("{c} | {d} | {s}\n", .{ isDuplicate(response), response.id, response.name });
         try stdout.flush();
     }
