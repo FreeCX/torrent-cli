@@ -33,6 +33,16 @@ fn logFn(
     }
 }
 
+fn getAndCheckIds(arguments: arg.Args) !?[]const []const u8 {
+    const all = arguments.result.subcommand_args.?.getArray("all");
+    const ids = arguments.result.subcommand_args.?.getArray("id");
+    // излишняя проверка, так как --all и --ids оба required, да и ещё взаимоисключаемы
+    if (all == null and ids == null) {
+        return error.MissingArgument;
+    }
+    return ids;
+}
+
 // TODO: better error handling
 pub fn main(init: std.process.Init) !void {
     const gpa = init.gpa;
@@ -64,18 +74,9 @@ pub fn main(init: std.process.Init) !void {
             const magnet = arguments.result.subcommand_args.?.getString("magnet");
             try command.add(gpa, io, stdout, path, magnet);
         },
-        arg.Command.Delete => {
-            const ids = arguments.result.subcommand_args.?.getArray("id");
-            try command.delete(gpa, stdout, ids);
-        },
-        arg.Command.Start => {
-            const ids = arguments.result.subcommand_args.?.getArray("id");
-            try command.start(gpa, stdout, ids);
-        },
-        arg.Command.Stop => {
-            const ids = arguments.result.subcommand_args.?.getArray("id");
-            try command.stop(gpa, stdout, ids);
-        },
+        arg.Command.Delete => try command.delete(gpa, stdout, try getAndCheckIds(arguments)),
+        arg.Command.Start => try command.start(gpa, stdout, try getAndCheckIds(arguments)),
+        arg.Command.Stop => try command.stop(gpa, stdout, try getAndCheckIds(arguments)),
         arg.Command.Status => try command.status(gpa, stdout),
     }
 }

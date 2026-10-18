@@ -81,6 +81,7 @@ pub fn setupArgs(init: std.process.Init) !Args {
                 .long = "path",
                 .value_type = .path,
                 .conflicts_with = &.{"magnet"},
+                .required = true,
                 .help = "From file/folder",
             },
             .{
@@ -88,6 +89,7 @@ pub fn setupArgs(init: std.process.Init) !Args {
                 .short = 'm',
                 .long = "magnet",
                 .conflicts_with = &.{"path"},
+                .required = true,
                 .help = "From magnet url",
             },
         },
@@ -98,12 +100,23 @@ pub fn setupArgs(init: std.process.Init) !Args {
         .help = "Start torrent",
         .args = &[_]args.ArgSpec{
             .{
+                .name = "all",
+                .short = 'a',
+                .long = "all",
+                .conflicts_with = &.{"id"},
+                .required = true,
+                .action = .store_true,
+                .help = "Start all",
+            },
+            .{
                 .name = "id",
                 .short = 'i',
                 .long = "id",
                 .nargs = .zero_or_more,
                 .value_type = .array,
-                .help = "By ids",
+                .conflicts_with = &.{"all"},
+                .required = true,
+                .help = "By id",
             },
         },
     });
@@ -113,12 +126,23 @@ pub fn setupArgs(init: std.process.Init) !Args {
         .help = "Stop torrent",
         .args = &[_]args.ArgSpec{
             .{
+                .name = "all",
+                .short = 'a',
+                .long = "all",
+                .conflicts_with = &.{"id"},
+                .required = true,
+                .action = .store_true,
+                .help = "Stop all",
+            },
+            .{
                 .name = "id",
                 .short = 'i',
                 .long = "id",
                 .nargs = .zero_or_more,
                 .value_type = .array,
-                .help = "By ids",
+                .conflicts_with = &.{"all"},
+                .required = true,
+                .help = "By id",
             },
         },
     });
@@ -128,12 +152,23 @@ pub fn setupArgs(init: std.process.Init) !Args {
         .help = "Delete torrent",
         .args = &[_]args.ArgSpec{
             .{
+                .name = "all",
+                .short = 'a',
+                .long = "all",
+                .conflicts_with = &.{"id"},
+                .required = true,
+                .action = .store_true,
+                .help = "Delete all",
+            },
+            .{
                 .name = "id",
                 .short = 'i',
                 .long = "id",
                 .nargs = .zero_or_more,
                 .value_type = .array,
-                .help = "By ids",
+                .conflicts_with = &.{"all"},
+                .required = true,
+                .help = "By id",
             },
         },
     });
