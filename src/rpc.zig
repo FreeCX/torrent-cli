@@ -4,7 +4,6 @@ const mem = std.mem;
 const http = std.http;
 const json = std.json;
 
-const RpcClient = @This();
 const log = std.log.scoped(.rpc);
 var client: http.Client = undefined;
 var uri: std.Uri = undefined;
@@ -92,6 +91,8 @@ pub fn init(io: Io, gpa: mem.Allocator, host: []const u8, port: u16, buf: []u8) 
 }
 
 pub fn deinit() void {
+    id = 0;
+    session_id_len = 0;
     client.deinit();
 }
 
