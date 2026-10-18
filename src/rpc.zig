@@ -61,7 +61,10 @@ pub const AddInfo = struct {
         gpa.free(self.hash_string);
     }
 };
-const TorrentAddResult = struct { torrent_added: AddInfo };
+const TorrentAddResult = struct {
+    torrent_added: ?TorrentAddInfo = null,
+    torrent_duplicate: ?TorrentAddInfo = null,
+};
 const TorrentAddResponse = TorrentBase(TorrentAddResult);
 
 // part of http response
@@ -208,10 +211,20 @@ pub fn torrentAdd(gpa: mem.Allocator, filename: ?[]const u8, metainfo: ?[]const 
     );
     defer parsed.deinit();
 
+    if (parsed.value.result.torrent_added == null and parsed.value.result.torrent_duplicate != null) {
+        return AddInfo{
+            .id = parsed.value.result.torrent_duplicate.?.id,
+            .name = try gpa.dupe(u8, parsed.value.result.torrent_duplicate.?.name),
+            .hash_string = try gpa.dupe(u8, parsed.value.result.torrent_duplicate.?.hash_string),
+            .is_duplicate = true,
+        };
+    }
+
     return AddInfo{
-        .id = parsed.value.result.torrent_added.id,
-        .name = try gpa.dupe(u8, parsed.value.result.torrent_added.name),
-        .hash_string = try gpa.dupe(u8, parsed.value.result.torrent_added.hash_string),
+        .id = parsed.value.result.torrent_added.?.id,
+        .name = try gpa.dupe(u8, parsed.value.result.torrent_added.?.name),
+        .hash_string = try gpa.dupe(u8, parsed.value.result.torrent_added.?.hash_string),
+        .is_duplicate = false,
     };
 }
 

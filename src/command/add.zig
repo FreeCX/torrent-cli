@@ -11,6 +11,15 @@ fn isDirectory(io: Io, path: []const u8) !bool {
     return stat.kind == .directory;
 }
 
+fn filePath(io: Io, path: []const u8) ![]u8 {
+    const size = try Io.Dir.cwd().realPathFile(io, path, &buffer);
+    return buffer[0..size];
+}
+
+fn isDuplicate(data: rpc.AddInfo) u8 {
+    return if (data.is_duplicate) '!' else '+';
+}
+
 pub fn add(gpa: mem.Allocator, io: Io, stdout: *Io.Writer, path: ?[]const u8, magnet: ?[]const u8) !void {
     if (path != null) {
         if (try isDirectory(io, path.?)) {
@@ -30,11 +39,11 @@ pub fn add(gpa: mem.Allocator, io: Io, stdout: *Io.Writer, path: ?[]const u8, ma
                     const filename = try std.fmt.bufPrint(
                         &buffer,
                         "{s}/{s}",
-                        .{ path.?, entry.basename },
+                        .{ path.?, entry.path },
                     );
                     const response = try rpc.torrentAdd(gpa, filename, null);
                     defer response.deinit(gpa);
-                    try stdout.print("+ | {d} | {s}\n", .{ response.id, response.name });
+                    try stdout.print("{c} | {d} | {s}\n", .{ isDuplicate(response), response.id, response.name });
                 }
             }
             try stdout.flush();
@@ -43,9 +52,13 @@ pub fn add(gpa: mem.Allocator, io: Io, stdout: *Io.Writer, path: ?[]const u8, ma
         }
 
         // add one file
-        const response = try rpc.torrentAdd(gpa, path.?, null);
+        const response = try rpc.torrentAdd(
+            gpa,
+            try filePath(io, path.?),
+            null,
+        );
         defer response.deinit(gpa);
-        try stdout.print("+ | {d} | {s}\n", .{ response.id, response.name });
+        try stdout.print("{c} | {d} | {s}\n", .{ isDuplicate(response), response.id, response.name });
         try stdout.flush();
         return;
     }
@@ -54,7 +67,7 @@ pub fn add(gpa: mem.Allocator, io: Io, stdout: *Io.Writer, path: ?[]const u8, ma
         // add magnet url
         const response = try rpc.torrentAdd(gpa, magnet, null);
         defer response.deinit(gpa);
-        try stdout.print("+ | {d} | {s}\n", .{ response.id, response.name });
+        try stdout.print("{c} | {d} | {s}\n", .{ isDuplicate(response), response.id, response.name });
         try stdout.flush();
     }
 }
