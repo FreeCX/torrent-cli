@@ -4,6 +4,7 @@ pub fn parseIds(gpa: std.mem.Allocator, T: type, items: ?[]const []const u8) !?[
     if (items == null) return null;
 
     var result = try gpa.alloc(T, items.?.len);
+    errdefer gpa.free(result);
     for (items.?, 0..) |item, index| {
         result[index] = try std.fmt.parseInt(T, item, 10);
     }
