@@ -9,12 +9,12 @@ pub fn delete(gpa: mem.Allocator, stdout: *Io.Writer, raw_ids: ?[]const []const 
     const ids = try util.parseIds(gpa, u32, raw_ids);
     defer if (ids != null) gpa.free(ids.?);
 
-    const torrents = try rpc.torrentStatus(gpa, ids);
-    defer gpa.free(torrents);
+    const stats = try rpc.torrentStatus(gpa, ids);
+    defer stats.deinit(gpa);
 
     _ = try rpc.torrentDelete(ids);
 
-    for (torrents) |torrent| {
+    for (stats.items) |torrent| {
         try stdout.print("× | {d} | {s}\n", .{ torrent.id, torrent.name });
     }
     try stdout.flush();

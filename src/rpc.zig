@@ -45,6 +45,16 @@ pub const StatusInfo = struct {
     rate_upload: u64,
     status: Status,
 };
+pub const TorrentStatsList = struct {
+    items: []StatusInfo,
+
+    pub fn deinit(self: TorrentStatsList, gpa: mem.Allocator) void {
+        for (self.items) |t| {
+            gpa.free(t.name);
+        }
+        gpa.free(self.items);
+    }
+};
 const TorrentStatusResult = struct { torrents: []StatusInfo };
 const TorrentStatusResponse = TorrentBase(TorrentStatusResult);
 
@@ -162,7 +172,7 @@ fn jsonify(data: anytype) ![]u8 {
     return buffer[0..writer.end];
 }
 
-pub fn torrentStatus(gpa: mem.Allocator, ids: ?[]u32) ![]StatusInfo {
+pub fn torrentStatus(gpa: mem.Allocator, ids: ?[]u32) !TorrentStatsList {
     const params = .{
         .ids = ids,
         .fields = .{ "id", "name", "status", "rate_download", "rate_upload", "percent_done" },
@@ -182,7 +192,8 @@ pub fn torrentStatus(gpa: mem.Allocator, ids: ?[]u32) ![]StatusInfo {
     for (duped) |*item| {
         item.name = try gpa.dupe(u8, item.name);
     }
-    return duped;
+
+    return TorrentStatsList{ .items = duped };
 }
 
 pub fn torrentAdd(gpa: mem.Allocator, filename: ?[]const u8, metainfo: ?[]const u8) !AddInfo {
