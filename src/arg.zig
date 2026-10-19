@@ -1,37 +1,56 @@
 const std = @import("std");
+const Io = std.Io;
+const mem = std.mem;
+
 const args = @import("args");
 
 const app = @import("build_zig_zon");
 
 pub const Command = enum {
-    Add,
-    Start,
-    Stop,
-    Delete,
-    Status,
+    add,
+    start,
+    stop,
+    delete,
+    status,
+};
 
-    pub fn parse(command: ?[]const u8) ?Command {
-        if (command == null) return null;
+pub const AddCommandArgs = struct {
+    path: ?[]const u8,
+    magnet: ?[]const u8,
+};
 
-        if (std.mem.eql(u8, command.?, "add")) return Command.Add;
-        if (std.mem.eql(u8, command.?, "start")) return Command.Start;
-        if (std.mem.eql(u8, command.?, "stop")) return Command.Stop;
-        if (std.mem.eql(u8, command.?, "delete")) return Command.Delete;
-        if (std.mem.eql(u8, command.?, "status")) return Command.Status;
+pub const OtherCommandArgs = struct {
+    all: ?bool,
+    id: ?[]u32,
+};
 
-        return null;
-    }
+pub const Commands = union(Command) {
+    add: AddCommandArgs,
+    start: OtherCommandArgs,
+    stop: OtherCommandArgs,
+    delete: OtherCommandArgs,
+    status: struct {},
 };
 
 pub const Args = struct {
-    parser: args.ArgumentParser,
-    result: args.ParseResult,
+    command: Commands,
+    host: []const u8,
+    port: u16,
     level: std.log.Level,
-    command: Command,
+    buffer_size: u32,
 
-    pub fn deinit(self: *Args) void {
-        self.result.deinit();
-        self.parser.deinit();
+    pub fn deinit(self: Args, gpa: mem.Allocator) void {
+        gpa.free(self.host);
+        switch (self.command) {
+            .add => |cmd| {
+                if (cmd.path) |path| gpa.free(path);
+                if (cmd.magnet) |magnet| gpa.free(magnet);
+            },
+            .start, .stop, .delete => |cmd| {
+                if (cmd.id) |id| gpa.free(id);
+            },
+            .status => {},
+        }
     }
 };
 
@@ -44,14 +63,26 @@ fn parseLogLevel(value: []const u8) std.log.Level {
     return .err;
 }
 
-// https://muhammad-fiaz.github.io/args.zig/
-pub fn setupArgs(init: std.process.Init) !Args {
-    var parser = try args.ArgumentParser.init(init.gpa, .{
+fn parseIds(gpa: std.mem.Allocator, T: type, items: ?[]const []const u8) !?[]T {
+    if (items == null) return null;
+
+    var result = try gpa.alloc(T, items.?.len);
+    errdefer gpa.free(result);
+    for (items.?, 0..) |item, index| {
+        result[index] = try std.fmt.parseInt(T, item, 10);
+    }
+
+    return result;
+}
+
+pub fn parseArgs(gpa: mem.Allocator, init: std.process.Init, stdout: *Io.Writer) !Args {
+    var parser = try args.ArgumentParser.init(gpa, .{
         .name = @tagName(app.name),
         .version = app.version,
         .description = app.description,
+        .config = .{ .allow_negated_flags = false },
     });
-    errdefer parser.deinit();
+    defer parser.deinit();
 
     try parser.addHostNameOption("host", .{
         .default = "127.0.0.1",
@@ -64,6 +95,11 @@ pub fn setupArgs(init: std.process.Init) !Args {
         .min = 1,
         .max = 65535,
         .help = "Transmission port",
+    });
+    try parser.addUintOption("buffer", .{
+        .default = "65536",
+        .short = 'b',
+        .help = "RPC buffer size",
     });
     try parser.addOption("level", .{
         .short = 'l',
@@ -81,7 +117,6 @@ pub fn setupArgs(init: std.process.Init) !Args {
                 .long = "path",
                 .value_type = .path,
                 .conflicts_with = &.{"magnet"},
-                .required = true,
                 .help = "From file/folder",
             },
             .{
@@ -89,7 +124,6 @@ pub fn setupArgs(init: std.process.Init) !Args {
                 .short = 'm',
                 .long = "magnet",
                 .conflicts_with = &.{"path"},
-                .required = true,
                 .help = "From magnet url",
             },
         },
@@ -104,7 +138,6 @@ pub fn setupArgs(init: std.process.Init) !Args {
                 .short = 'a',
                 .long = "all",
                 .conflicts_with = &.{"id"},
-                .required = true,
                 .action = .store_true,
                 .help = "Start all",
             },
@@ -115,7 +148,6 @@ pub fn setupArgs(init: std.process.Init) !Args {
                 .nargs = .zero_or_more,
                 .value_type = .array,
                 .conflicts_with = &.{"all"},
-                .required = true,
                 .help = "By id",
             },
         },
@@ -130,7 +162,6 @@ pub fn setupArgs(init: std.process.Init) !Args {
                 .short = 'a',
                 .long = "all",
                 .conflicts_with = &.{"id"},
-                .required = true,
                 .action = .store_true,
                 .help = "Stop all",
             },
@@ -141,7 +172,6 @@ pub fn setupArgs(init: std.process.Init) !Args {
                 .nargs = .zero_or_more,
                 .value_type = .array,
                 .conflicts_with = &.{"all"},
-                .required = true,
                 .help = "By id",
             },
         },
@@ -156,7 +186,6 @@ pub fn setupArgs(init: std.process.Init) !Args {
                 .short = 'a',
                 .long = "all",
                 .conflicts_with = &.{"id"},
-                .required = true,
                 .action = .store_true,
                 .help = "Delete all",
             },
@@ -167,7 +196,6 @@ pub fn setupArgs(init: std.process.Init) !Args {
                 .nargs = .zero_or_more,
                 .value_type = .array,
                 .conflicts_with = &.{"all"},
-                .required = true,
                 .help = "By id",
             },
         },
@@ -179,18 +207,84 @@ pub fn setupArgs(init: std.process.Init) !Args {
     });
 
     var result = try parser.parseProcess(init);
-    errdefer result.deinit();
+    defer result.deinit();
 
-    const command = Command.parse(result.subcommand);
-    if (command == null) {
+    if (result.subcommand == null) {
         try parser.printHelp();
         return error.Exit;
     }
+    if (result.subcommand_args == null) {
+        return error.MissingSubcommandArgs;
+    }
+
+    var cmd_name: Command = undefined;
+    if (std.mem.eql(u8, result.subcommand.?, "add")) cmd_name = .add;
+    if (std.mem.eql(u8, result.subcommand.?, "start")) cmd_name = .start;
+    if (std.mem.eql(u8, result.subcommand.?, "stop")) cmd_name = .stop;
+    if (std.mem.eql(u8, result.subcommand.?, "delete")) cmd_name = .delete;
+    if (std.mem.eql(u8, result.subcommand.?, "status")) cmd_name = .status;
+
+    var command: Commands = undefined;
+    switch (cmd_name) {
+        .add => {
+            const path = result.subcommand_args.?.getString("path");
+            const magnet = result.subcommand_args.?.getString("magnet");
+
+            if (path == null and magnet == null) {
+                try stdout.print("add: missing --path or --magnet argument\n", .{});
+                try stdout.flush();
+                return error.Exit;
+            }
+            if (path != null and magnet != null) {
+                try stdout.print("add: required one of --path or --magnet argument\n", .{});
+                try stdout.flush();
+                return error.Exit;
+            }
+
+            command = .{
+                .add = AddCommandArgs{
+                    .path = if (path != null) try gpa.dupe(u8, path.?) else null,
+                    .magnet = if (magnet != null) try gpa.dupe(u8, magnet.?) else null,
+                },
+            };
+        },
+        .start, .stop, .delete => {
+            const all = result.subcommand_args.?.getBool("all");
+            const ids = result.subcommand_args.?.getArray("id");
+
+            if (all == null and ids == null) {
+                try stdout.print("{s}: missing --all or --id argument\n", .{@tagName(cmd_name)});
+                try stdout.flush();
+                return error.Exit;
+            }
+            if (all != null and ids != null) {
+                try stdout.print("{s}: required one of --all or --id argument\n", .{@tagName(cmd_name)});
+                try stdout.flush();
+                return error.Exit;
+            }
+
+            const data = OtherCommandArgs{
+                .all = all,
+                .id = if (ids != null) try parseIds(gpa, u32, ids) else null,
+            };
+
+            switch (cmd_name) {
+                .start => command = .{ .start = data },
+                .stop => command = .{ .stop = data },
+                .delete => command = .{ .delete = data },
+                else => {},
+            }
+        },
+        .status => {
+            command = .{ .status = .{} };
+        },
+    }
 
     return Args{
-        .parser = parser,
-        .result = result,
-        .command = command.?,
+        .command = command,
+        .host = try gpa.dupe(u8, result.getOrString("host", "127.0.0.1")),
+        .port = @intCast(result.getOrUint("port", 9091)),
+        .buffer_size = @intCast(result.getOrUint("buffer", 65536)),
         .level = parseLogLevel(result.getOrString("level", "err")),
     };
 }

@@ -5,7 +5,7 @@ const rpc = @import("rpc.zig");
 const arg = @import("arg.zig");
 
 const command = .{
-    .add = @import("command/add.zig").add,
+    .add = @import("command/add.zig"),
     .delete = @import("command/delete.zig").delete,
     .start = @import("command/start.zig").start,
     .stop = @import("command/stop.zig").stop,
@@ -33,16 +33,6 @@ fn logFn(
     }
 }
 
-fn getAndCheckIds(arguments: arg.Args) !?[]const []const u8 {
-    const all = arguments.result.subcommand_args.?.getArray("all");
-    const ids = arguments.result.subcommand_args.?.getArray("id");
-    // излишняя проверка, так как --all и --ids оба required, да и ещё взаимоисключаемы
-    if (all == null and ids == null) {
-        return error.MissingArgument;
-    }
-    return ids;
-}
-
 // TODO: better error handling
 pub fn main(init: std.process.Init) !void {
     const gpa = init.gpa;
@@ -52,31 +42,32 @@ pub fn main(init: std.process.Init) !void {
     var stdout_file_writer: Io.File.Writer = .init(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_file_writer.interface;
 
-    var arguments = arg.setupArgs(init) catch |err| switch (err) {
+    var arguments = arg.parseArgs(gpa, init, stdout) catch |err| switch (err) {
         error.Exit => return,
         else => return err,
     };
-    defer arguments.deinit();
+    defer arguments.deinit(gpa);
 
     log_level = arguments.level;
 
-    const rpc_buffer = try gpa.alloc(u8, 65536);
+    const rpc_buffer = try gpa.alloc(u8, arguments.buffer_size);
     defer gpa.free(rpc_buffer);
-
-    const host = arguments.result.getOrString("host", "127.0.0.1");
-    const port: u16 = @intCast(arguments.result.getOrUint("port", 9091));
-    rpc.init(io, gpa, host, port, rpc_buffer);
+    rpc.init(io, gpa, arguments.host, arguments.port, rpc_buffer);
     defer rpc.deinit();
 
     switch (arguments.command) {
-        arg.Command.Add => {
-            const path = arguments.result.subcommand_args.?.getString("path");
-            const magnet = arguments.result.subcommand_args.?.getString("magnet");
-            try command.add(gpa, io, stdout, path, magnet);
+        arg.Command.add => |params| {
+            if (params.path) |path| {
+                try command.add.addPath(gpa, io, stdout, path);
+            }
+            if (params.magnet) |magnet| {
+                try command.add.addMagnet(gpa, stdout, magnet);
+            }
+            // TODO: nothing to do
         },
-        arg.Command.Delete => try command.delete(gpa, stdout, try getAndCheckIds(arguments)),
-        arg.Command.Start => try command.start(gpa, stdout, try getAndCheckIds(arguments)),
-        arg.Command.Stop => try command.stop(gpa, stdout, try getAndCheckIds(arguments)),
-        arg.Command.Status => try command.status(gpa, stdout),
+        arg.Command.delete => |params| try command.delete(gpa, stdout, params.id),
+        arg.Command.start => |params| try command.start(gpa, stdout, params.id),
+        arg.Command.stop => |params| try command.stop(gpa, stdout, params.id),
+        arg.Command.status => try command.status(gpa, stdout),
     }
 }
