@@ -97,64 +97,70 @@ pub fn deinit() void {
 }
 
 fn doRequest(method: []const u8, params: anytype) !MiniResponse {
-    log.debug("--- new request ---", .{});
-    // construct request
-    var request = try client.request(.POST, uri, .{
-        .headers = .{
-            .content_type = .{ .override = "application/json; utf-8" },
-        },
-    });
-    if (session_id_len > 0) {
-        request.extra_headers = &[_]http.Header{http.Header{
-            .name = session_id_key,
-            .value = session_id[0..session_id_len],
-        }};
-    }
-    defer request.deinit();
+    for (0..3) |attempt| {
+        log.debug("request attempt={d}", .{attempt + 1});
 
-    // send head + body
-    const body = try jsonify(.{ .id = nextId(), .jsonrpc = "2.0", .method = method, .params = params });
-    log.debug("request={s}", .{body});
-    _ = try request.sendBodyComplete(body);
-
-    // responce headers
-    var response = try request.receiveHead(buffer);
-    log.debug("status_code={any}", .{response.head.status});
-    if (response.head.status == .conflict) {
-        log.debug("409 occured", .{});
-        var it = response.head.iterateHeaders();
-        while (it.next()) |header| {
-            if (mem.eql(u8, header.name, session_id_key)) {
-                log.debug("session_id={s}", .{header.value});
-                session_id_len = header.value.len;
-                if (session_id_len > session_id.len) {
-                    return error.SessionIdTooLong;
-                }
-                @memcpy(session_id[0..session_id_len], header.value);
-            }
+        // construct request
+        var request = try client.request(.POST, uri, .{
+            .headers = .{
+                .content_type = .{ .override = "application/json; utf-8" },
+            },
+        });
+        if (session_id_len > 0) {
+            request.extra_headers = &[_]http.Header{http.Header{
+                .name = session_id_key,
+                .value = session_id[0..session_id_len],
+            }};
         }
-        // TODO: need a better retry policy
-        return doRequest(method, params);
+        defer request.deinit();
+
+        // send head + body
+        const body = try jsonify(.{ .id = nextId(), .jsonrpc = "2.0", .method = method, .params = params });
+        log.debug("request body={s}", .{body});
+        _ = try request.sendBodyComplete(body);
+
+        // responce headers
+        var response = try request.receiveHead(buffer);
+        log.debug("status_code={any}", .{response.head.status});
+        if (response.head.status == .conflict) {
+            var it = response.head.iterateHeaders();
+            while (it.next()) |header| {
+                if (mem.eql(u8, header.name, session_id_key)) {
+                    log.debug("session_id={s}", .{header.value});
+                    session_id_len = header.value.len;
+                    if (session_id_len > session_id.len) {
+                        return error.SessionIdTooLong;
+                    }
+                    @memcpy(session_id[0..session_id_len], header.value);
+                }
+            }
+            continue;
+        }
+
+        // response body
+        var transfer_buffer: [64]u8 = undefined;
+        var decompress: http.Decompress = undefined;
+        const reader = response.readerDecompressing(
+            &transfer_buffer,
+            &decompress,
+            &decompress_buffer,
+        );
+        const readed = try reader.readSliceShort(buffer);
+        if (readed == 0) {
+            return error.MissingBody;
+        }
+        if (readed == buffer.len) {
+            return error.ResponseTooLarge;
+        }
+        log.debug("response={s}", .{buffer[0..readed]});
+
+        return MiniResponse{
+            .body = buffer[0..readed],
+            .status = response.head.status,
+        };
     }
 
-    // response body
-    var transfer_buffer: [64]u8 = undefined;
-    var decompress: http.Decompress = undefined;
-    const reader = response.readerDecompressing(
-        &transfer_buffer,
-        &decompress,
-        &decompress_buffer,
-    );
-    const readed = try reader.readSliceShort(buffer);
-    if (readed == 0) {
-        return error.MissingBody;
-    }
-    if (readed == buffer.len) {
-        return error.ResponseTooLarge;
-    }
-    log.debug("response={s}", .{buffer[0..readed]});
-
-    return MiniResponse{ .body = buffer[0..readed], .status = response.head.status };
+    return error.TooManyRetries;
 }
 
 fn nextId() u64 {
