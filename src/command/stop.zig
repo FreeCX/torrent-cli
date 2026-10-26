@@ -6,7 +6,7 @@ const rpc = @import("../rpc.zig");
 
 pub fn stop(gpa: mem.Allocator, stdout: *Io.Writer, ids: ?[]u32) !void {
     const stats = try rpc.torrentStatus(gpa, ids);
-    stats.deinit(gpa);
+    defer stats.deinit(gpa);
 
     _ = try rpc.torrentStop(ids);
 
