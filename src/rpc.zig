@@ -22,7 +22,8 @@ fn TorrentBase(T: type) type {
     return struct {
         id: u64,
         jsonrpc: []u8,
-        result: T,
+        result: ?T = null,
+        @"error": ?struct { code: u32, message: []u8 } = null,
     };
 }
 
@@ -194,7 +195,13 @@ pub fn torrentStatus(gpa: mem.Allocator, ids: ?[]u32) !TorrentStatsList {
     );
     defer parsed.deinit();
 
-    const duped = try gpa.dupe(StatusInfo, parsed.value.result.torrents);
+    // TODO
+    if (parsed.value.@"error") |err| {
+        log.err("code={d}, message='{s}'", .{ err.code, err.message });
+        return error.ErrorResponse;
+    }
+
+    const duped = try gpa.dupe(StatusInfo, parsed.value.result.?.torrents);
     errdefer gpa.free(duped);
     for (duped) |*item| {
         item.name = try gpa.dupe(u8, item.name);
@@ -239,19 +246,25 @@ pub fn torrentAdd(gpa: mem.Allocator, filename: ?[]const u8, metainfo: ?[]const 
     );
     defer parsed.deinit();
 
-    if (parsed.value.result.torrent_added == null and parsed.value.result.torrent_duplicate != null) {
+    // TODO
+    if (parsed.value.@"error") |err| {
+        log.err("code={d}, message='{s}'", .{ err.code, err.message });
+        return error.ErrorResponse;
+    }
+
+    if (parsed.value.result.?.torrent_added == null and parsed.value.result.?.torrent_duplicate != null) {
         return AddInfo{
-            .id = parsed.value.result.torrent_duplicate.?.id,
-            .name = try gpa.dupe(u8, parsed.value.result.torrent_duplicate.?.name),
-            .hash_string = try gpa.dupe(u8, parsed.value.result.torrent_duplicate.?.hash_string),
+            .id = parsed.value.result.?.torrent_duplicate.?.id,
+            .name = try gpa.dupe(u8, parsed.value.result.?.torrent_duplicate.?.name),
+            .hash_string = try gpa.dupe(u8, parsed.value.result.?.torrent_duplicate.?.hash_string),
             .is_duplicate = true,
         };
     }
 
     return AddInfo{
-        .id = parsed.value.result.torrent_added.?.id,
-        .name = try gpa.dupe(u8, parsed.value.result.torrent_added.?.name),
-        .hash_string = try gpa.dupe(u8, parsed.value.result.torrent_added.?.hash_string),
+        .id = parsed.value.result.?.torrent_added.?.id,
+        .name = try gpa.dupe(u8, parsed.value.result.?.torrent_added.?.name),
+        .hash_string = try gpa.dupe(u8, parsed.value.result.?.torrent_added.?.hash_string),
         .is_duplicate = false,
     };
 }
