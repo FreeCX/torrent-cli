@@ -5,291 +5,146 @@ const http = std.http;
 const json = std.json;
 
 const log = std.log.scoped(.rpc);
-var client: http.Client = undefined;
-var uri: std.Uri = undefined;
-
-var buffer: []u8 = undefined;
-var decompress_buffer: [std.compress.flate.max_window_len]u8 = undefined;
-
-var id: u64 = 0;
-var session_id: [256]u8 = undefined;
-var session_id_len: usize = 0;
 
 const session_id_key = "X-Transmission-Session-Id";
 
-// base json with custom result
-fn TorrentBase(T: type) type {
-    return struct {
-        id: u64,
-        jsonrpc: []u8,
-        result: ?T = null,
-        @"error": ?struct { code: u32, message: []u8 } = null,
-    };
-}
-
-// torrent get
-pub const Status = enum(u8) {
-    Stopped = 0,
-    QueuedVerify = 1,
-    Verifying = 2,
-    QueuedDownload = 3,
-    Downloading = 4,
-    QueuedSeed = 5,
-    Seeding = 6,
+// tiny part of http response
+pub const Response = struct {
+    body: []u8,
+    status: http.Status,
 };
-pub const StatusInfo = struct {
+
+// TODO:
+//  - выделить класс ошибок для всех !
+//  - перейти на Reader и Writer по буферам
+pub const Client = struct {
     id: u64,
-    name: []u8,
-    percent_done: f64,
-    rate_download: u64,
-    rate_upload: u64,
-    status: Status,
-};
-pub const TorrentStatsList = struct {
-    items: []StatusInfo,
+    session_id_len: usize,
+    client: http.Client,
+    uri: std.Uri,
 
-    pub fn deinit(self: TorrentStatsList, gpa: mem.Allocator) void {
-        for (self.items) |t| {
-            gpa.free(t.name);
-        }
-        gpa.free(self.items);
-    }
-};
-const TorrentStatusResult = struct { torrents: []StatusInfo };
-const TorrentStatusResponse = TorrentBase(TorrentStatusResult);
+    read_buffer: []u8,
+    write_buffer: []u8,
 
-// torrent add
-const TorrentAddInfo = struct { id: u64, name: []u8, hash_string: []u8 };
-pub const AddInfo = struct {
-    id: u64,
-    name: []u8,
-    hash_string: []u8,
-    is_duplicate: bool,
+    session_id: [256]u8 = undefined,
+    decompress_buffer: [std.compress.flate.max_window_len]u8 = undefined,
 
-    pub fn deinit(self: AddInfo, gpa: mem.Allocator) void {
-        gpa.free(self.name);
-        gpa.free(self.hash_string);
-    }
-};
-const TorrentAddResult = struct {
-    torrent_added: ?TorrentAddInfo = null,
-    torrent_duplicate: ?TorrentAddInfo = null,
-};
-const TorrentAddResponse = TorrentBase(TorrentAddResult);
+    max_attempt_count: u8 = 3,
 
-// part of http response
-const MiniResponse = struct { body: []u8, status: http.Status };
-
-pub fn init(io: Io, gpa: mem.Allocator, host: []const u8, port: u16, buf: []u8) void {
-    uri = std.Uri{
-        .scheme = "http",
-        .host = .{ .percent_encoded = host },
-        .port = port,
-        .path = .{ .percent_encoded = "/transmission/rpc/" },
-    };
-    client = http.Client{ .allocator = gpa, .io = io };
-    buffer = buf;
-}
-
-pub fn deinit() void {
-    id = 0;
-    session_id_len = 0;
-    client.deinit();
-}
-
-fn doRequest(method: []const u8, params: anytype) !MiniResponse {
-    for (0..3) |attempt| {
-        log.debug("request attempt={d}", .{attempt + 1});
-
-        // construct request
-        var request = try client.request(.POST, uri, .{
-            .headers = .{
-                .content_type = .{ .override = "application/json; utf-8" },
+    pub fn init(
+        io: Io,
+        gpa: mem.Allocator,
+        host: []const u8,
+        port: u16,
+        read_buffer: []u8,
+        write_buffer: []u8,
+    ) Client {
+        return Client{
+            .id = 0,
+            .session_id_len = 0,
+            .client = http.Client{ .allocator = gpa, .io = io },
+            .uri = std.Uri{
+                .scheme = "http",
+                .host = .{ .percent_encoded = host },
+                .port = port,
+                .path = .{ .percent_encoded = "/transmission/rpc/" },
             },
-        });
-        if (session_id_len > 0) {
-            request.extra_headers = &[_]http.Header{http.Header{
-                .name = session_id_key,
-                .value = session_id[0..session_id_len],
-            }};
-        }
-        defer request.deinit();
-
-        // send head + body
-        const body = try jsonify(.{ .id = nextId(), .jsonrpc = "2.0", .method = method, .params = params });
-        log.debug("request body={s}", .{body});
-        _ = try request.sendBodyComplete(body);
-
-        // responce headers
-        var response = try request.receiveHead(buffer);
-        log.debug("status_code={any}", .{response.head.status});
-        if (response.head.status == .conflict) {
-            var it = response.head.iterateHeaders();
-            while (it.next()) |header| {
-                if (mem.eql(u8, header.name, session_id_key)) {
-                    log.debug("session_id={s}", .{header.value});
-                    session_id_len = header.value.len;
-                    if (session_id_len > session_id.len) {
-                        return error.SessionIdTooLong;
-                    }
-                    @memcpy(session_id[0..session_id_len], header.value);
-                }
-            }
-            continue;
-        }
-
-        // response body
-        var transfer_buffer: [64]u8 = undefined;
-        var decompress: http.Decompress = undefined;
-        const reader = response.readerDecompressing(
-            &transfer_buffer,
-            &decompress,
-            &decompress_buffer,
-        );
-        const readed = try reader.readSliceShort(buffer);
-        if (readed == 0) {
-            return error.MissingBody;
-        }
-        if (readed == buffer.len) {
-            return error.ResponseTooLarge;
-        }
-        log.debug("response={s}", .{buffer[0..readed]});
-
-        return MiniResponse{
-            .body = buffer[0..readed],
-            .status = response.head.status,
+            .read_buffer = read_buffer,
+            .write_buffer = write_buffer,
         };
     }
 
-    return error.TooManyRetries;
-}
-
-fn nextId() u64 {
-    const current = id;
-    id += 1;
-    return current;
-}
-
-fn jsonify(data: anytype) ![]u8 {
-    var writer = Io.Writer.fixed(buffer);
-    var stringifier = json.Stringify{
-        .writer = &writer,
-        .options = .{ .emit_null_optional_fields = false },
-    };
-    try stringifier.write(data);
-    return buffer[0..writer.end];
-}
-
-pub fn torrentStatus(gpa: mem.Allocator, ids: ?[]u32) !TorrentStatsList {
-    const params = .{
-        .ids = ids,
-        .fields = .{ "id", "name", "status", "rate_download", "rate_upload", "percent_done" },
-    };
-
-    const response = try doRequest("torrent_get", params);
-    const parsed = try json.parseFromSlice(
-        TorrentStatusResponse,
-        gpa,
-        response.body,
-        .{ .ignore_unknown_fields = true },
-    );
-    defer parsed.deinit();
-
-    // TODO
-    if (parsed.value.@"error") |err| {
-        log.err("code={d}, message='{s}'", .{ err.code, err.message });
-        return error.ErrorResponse;
+    pub fn deinit(self: *Client) void {
+        self.id = 0;
+        self.session_id_len = 0;
+        self.client.deinit();
     }
 
-    const duped = try gpa.dupe(StatusInfo, parsed.value.result.?.torrents);
-    errdefer gpa.free(duped);
-    for (duped) |*item| {
-        item.name = try gpa.dupe(u8, item.name);
-        errdefer gpa.free(item.name);
+    fn nextId(self: *Client) u64 {
+        const current = self.id;
+        self.id += 1;
+        return current;
     }
 
-    return TorrentStatsList{ .items = duped };
-}
-
-pub fn torrentAdd(gpa: mem.Allocator, filename: ?[]const u8, metainfo: ?[]const u8) !AddInfo {
-    if (filename != null and metainfo != null) {
-        return error.MultipleFieldsProvided;
-    }
-    if (filename == null and metainfo == null) {
-        return error.NoFieldProvided;
-    }
-
-    var metainfo_encoded: ?[]const u8 = null;
-    var encoded: []u8 = undefined;
-    if (metainfo != null) {
-        const codec = std.base64.standard;
-        encoded = try gpa.alloc(u8, codec.Encoder.calcSize(metainfo.?.len));
-        metainfo_encoded = codec.Encoder.encode(encoded, metainfo.?);
+    fn jsonify(self: *Client, data: anytype) ![]u8 {
+        var writer = Io.Writer.fixed(self.write_buffer);
+        var stringifier = json.Stringify{
+            .writer = &writer,
+            .options = .{ .emit_null_optional_fields = false },
+        };
+        try stringifier.write(data);
+        return self.write_buffer[0..writer.end];
     }
 
-    const params = .{ .metainfo = metainfo_encoded, .filename = filename };
-    const response = doRequest("torrent_add", params) catch |err| {
-        if (metainfo != null) {
-            gpa.free(encoded);
+    pub fn request(self: *Client, method: []const u8, params: anytype) !Response {
+        for (0..self.max_attempt_count) |attempt| {
+            log.debug("request attempt={d}", .{attempt + 1});
+
+            // construct request
+            var req = try self.client.request(.POST, self.uri, .{
+                .headers = .{
+                    .content_type = .{ .override = "application/json; utf-8" },
+                },
+            });
+            if (self.session_id_len > 0) {
+                req.extra_headers = &[_]http.Header{http.Header{
+                    .name = session_id_key,
+                    .value = self.session_id[0..self.session_id_len],
+                }};
+            }
+            defer req.deinit();
+
+            // send head + body
+            const body = try self.jsonify(.{
+                .id = self.nextId(),
+                .jsonrpc = "2.0",
+                .method = method,
+                .params = params,
+            });
+            log.debug("request body={s}", .{body});
+            _ = try req.sendBodyComplete(body);
+
+            // responce headers
+            var response = try req.receiveHead(self.read_buffer);
+            log.debug("status_code={any}", .{response.head.status});
+            if (response.head.status == .conflict) {
+                var it = response.head.iterateHeaders();
+                while (it.next()) |header| {
+                    if (mem.eql(u8, header.name, session_id_key)) {
+                        log.debug("session_id={s}", .{header.value});
+                        self.session_id_len = header.value.len;
+                        if (self.session_id_len > self.session_id.len) {
+                            return error.SessionIdTooLong;
+                        }
+                        @memcpy(self.session_id[0..self.session_id_len], header.value);
+                    }
+                }
+                continue;
+            }
+
+            // response body
+            var transfer_buffer: [64]u8 = undefined;
+            var decompress: http.Decompress = undefined;
+            const reader = response.readerDecompressing(
+                &transfer_buffer,
+                &decompress,
+                &self.decompress_buffer,
+            );
+            const readed = try reader.readSliceShort(self.read_buffer);
+            if (readed == 0) {
+                return error.MissingBody;
+            }
+            if (readed == self.read_buffer.len) {
+                return error.ResponseTooLarge;
+            }
+            log.debug("response={s}", .{self.read_buffer[0..readed]});
+
+            return Response{
+                .body = self.read_buffer[0..readed],
+                .status = response.head.status,
+            };
         }
-        return err;
-    };
 
-    if (metainfo != null) {
-        gpa.free(encoded);
+        return error.TooManyRetries;
     }
-
-    const parsed = try json.parseFromSlice(
-        TorrentAddResponse,
-        gpa,
-        response.body,
-        .{},
-    );
-    defer parsed.deinit();
-
-    // TODO
-    if (parsed.value.@"error") |err| {
-        log.err("code={d}, message='{s}'", .{ err.code, err.message });
-        return error.ErrorResponse;
-    }
-
-    var is_duplicate = false;
-    var info: TorrentAddInfo = undefined;
-    if (parsed.value.result.?.torrent_added != null) {
-        info = parsed.value.result.?.torrent_added.?;
-    } else if (parsed.value.result.?.torrent_duplicate != null) {
-        info = parsed.value.result.?.torrent_duplicate.?;
-        is_duplicate = true;
-    } else {
-        return error.MissingInfo;
-    }
-
-    const duped_name = try gpa.dupe(u8, info.name);
-    errdefer gpa.free(duped_name);
-    const duped_hash = try gpa.dupe(u8, info.hash_string);
-
-    return AddInfo{
-        .id = info.id,
-        .name = duped_name,
-        .hash_string = duped_hash,
-        .is_duplicate = is_duplicate,
-    };
-}
-
-pub fn torrentStart(ids: ?[]u32) !bool {
-    const response = try doRequest("torrent_start", .{ .ids = ids });
-    return response.status == .ok;
-}
-
-pub fn torrentStop(ids: ?[]u32) !bool {
-    const response = try doRequest("torrent_stop", .{ .ids = ids });
-    return response.status == .ok;
-}
-
-pub fn torrentDelete(ids: ?[]u32) !bool {
-    const response = try doRequest(
-        "torrent_remove",
-        .{ .ids = ids, .delete_local_data = false },
-    );
-    return response.status == .ok;
-}
+};

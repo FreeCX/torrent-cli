@@ -50,24 +50,34 @@ pub fn main(init: std.process.Init) !void {
 
     log_level = arguments.level;
 
-    const rpc_buffer = try gpa.alloc(u8, arguments.buffer_size);
-    defer gpa.free(rpc_buffer);
-    rpc.init(io, gpa, arguments.host, arguments.port, rpc_buffer);
-    defer rpc.deinit();
+    const read_buffer = try gpa.alloc(u8, arguments.buffer_size);
+    defer gpa.free(read_buffer);
+    const write_buffer = try gpa.alloc(u8, arguments.buffer_size);
+    defer gpa.free(write_buffer);
+
+    var client: rpc.Client = .init(
+        io,
+        gpa,
+        arguments.host,
+        arguments.port,
+        read_buffer,
+        write_buffer,
+    );
+    defer client.deinit();
 
     switch (arguments.command) {
         arg.Command.add => |params| {
             if (params.path) |path| {
-                try command.add.addPath(gpa, io, stdout, path);
+                try command.add.addPath(gpa, io, &client, stdout, path);
             }
             if (params.magnet) |magnet| {
-                try command.add.addMagnet(gpa, stdout, magnet);
+                try command.add.addMagnet(gpa, &client, stdout, magnet);
             }
             // TODO: nothing to do
         },
-        arg.Command.delete => |params| try command.delete(gpa, stdout, params.id),
-        arg.Command.start => |params| try command.start(gpa, stdout, params.id),
-        arg.Command.stop => |params| try command.stop(gpa, stdout, params.id),
-        arg.Command.status => try command.status(gpa, stdout),
+        arg.Command.delete => |params| try command.delete(gpa, &client, stdout, params.id),
+        arg.Command.start => |params| try command.start(gpa, &client, stdout, params.id),
+        arg.Command.stop => |params| try command.stop(gpa, &client, stdout, params.id),
+        arg.Command.status => try command.status(gpa, &client, stdout),
     }
 }

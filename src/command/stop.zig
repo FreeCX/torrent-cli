@@ -2,13 +2,14 @@ const std = @import("std");
 const mem = std.mem;
 const Io = std.Io;
 
+const core = @import("core.zig");
 const rpc = @import("../rpc.zig");
 
-pub fn stop(gpa: mem.Allocator, stdout: *Io.Writer, ids: ?[]u32) !void {
-    const stats = try rpc.torrentStatus(gpa, ids);
+pub fn stop(gpa: mem.Allocator, client: *rpc.Client, stdout: *Io.Writer, ids: ?[]u32) !void {
+    const stats = try core.torrentStatus(gpa, client, ids);
     defer stats.deinit(gpa);
 
-    _ = try rpc.torrentStop(ids);
+    _ = try core.torrentStop(client, ids);
 
     for (stats.items) |torrent| {
         try stdout.print("■ | {d} | {s}\n", .{ torrent.id, torrent.name });

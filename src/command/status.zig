@@ -2,9 +2,10 @@ const std = @import("std");
 const mem = std.mem;
 const Io = std.Io;
 
+const core = @import("core.zig");
 const rpc = @import("../rpc.zig");
 
-fn statusAsSymbol(stat: rpc.Status) []const u8 {
+fn statusAsSymbol(stat: core.Status) []const u8 {
     return switch (stat) {
         .Downloading => "↓",
         .Seeding => "↑",
@@ -31,8 +32,8 @@ fn renderSpeedRate(value: u64, buffer: []u8) ![]u8 {
     return try std.fmt.bufPrint(buffer, "{d:2}.{d:02}", .{ a, b });
 }
 
-pub fn status(gpa: mem.Allocator, stdout: *Io.Writer) !void {
-    const stats = try rpc.torrentStatus(gpa, null);
+pub fn status(gpa: mem.Allocator, client: *rpc.Client, stdout: *Io.Writer) !void {
+    const stats = try core.torrentStatus(gpa, client, null);
     defer stats.deinit(gpa);
 
     var bar_buffer: [32]u8 = undefined;
