@@ -24,10 +24,10 @@ fn renderProgressBar(percent: u8, buffer: []u8) []u8 {
 }
 
 fn renderSpeedRate(value: u64, buffer: []u8) ![]u8 {
-    const divider: u64 = 1024 * 1024;
-    const a = value / divider;
-    // TODO: есть проблема с округлением
-    const b = (value % divider) * 100 / divider;
+    // simple variant of floor div
+    const divider = 1024 * 1024;
+    const a = value >> 20;
+    const b = ((value % divider) * 100) >> 20;
     return try std.fmt.bufPrint(buffer, "{d:2}.{d:02}", .{ a, b });
 }
 
