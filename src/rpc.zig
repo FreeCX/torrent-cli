@@ -191,7 +191,7 @@ pub fn torrentStatus(gpa: mem.Allocator, ids: ?[]u32) !TorrentStatsList {
         TorrentStatusResponse,
         gpa,
         response.body,
-        .{},
+        .{ .ignore_unknown_fields = true },
     );
     defer parsed.deinit();
 
@@ -205,6 +205,7 @@ pub fn torrentStatus(gpa: mem.Allocator, ids: ?[]u32) !TorrentStatsList {
     errdefer gpa.free(duped);
     for (duped) |*item| {
         item.name = try gpa.dupe(u8, item.name);
+        errdefer gpa.free(item.name);
     }
 
     return TorrentStatsList{ .items = duped };
@@ -252,20 +253,26 @@ pub fn torrentAdd(gpa: mem.Allocator, filename: ?[]const u8, metainfo: ?[]const 
         return error.ErrorResponse;
     }
 
-    if (parsed.value.result.?.torrent_added == null and parsed.value.result.?.torrent_duplicate != null) {
-        return AddInfo{
-            .id = parsed.value.result.?.torrent_duplicate.?.id,
-            .name = try gpa.dupe(u8, parsed.value.result.?.torrent_duplicate.?.name),
-            .hash_string = try gpa.dupe(u8, parsed.value.result.?.torrent_duplicate.?.hash_string),
-            .is_duplicate = true,
-        };
+    var is_duplicate = false;
+    var info: TorrentAddInfo = undefined;
+    if (parsed.value.result.?.torrent_added != null) {
+        info = parsed.value.result.?.torrent_added.?;
+    } else if (parsed.value.result.?.torrent_duplicate != null) {
+        info = parsed.value.result.?.torrent_duplicate.?;
+        is_duplicate = true;
+    } else {
+        return error.MissingInfo;
     }
 
+    const duped_name = try gpa.dupe(u8, info.name);
+    errdefer gpa.free(duped_name);
+    const duped_hash = try gpa.dupe(u8, info.hash_string);
+
     return AddInfo{
-        .id = parsed.value.result.?.torrent_added.?.id,
-        .name = try gpa.dupe(u8, parsed.value.result.?.torrent_added.?.name),
-        .hash_string = try gpa.dupe(u8, parsed.value.result.?.torrent_added.?.hash_string),
-        .is_duplicate = false,
+        .id = info.id,
+        .name = duped_name,
+        .hash_string = duped_hash,
+        .is_duplicate = is_duplicate,
     };
 }
 
