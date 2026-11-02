@@ -20,7 +20,6 @@ pub const AddCommandArgs = struct {
 };
 
 pub const OtherCommandArgs = struct {
-    all: ?bool,
     id: ?[]u32,
 };
 
@@ -249,22 +248,21 @@ pub fn parseArgs(gpa: mem.Allocator, init: std.process.Init, stdout: *Io.Writer)
             };
         },
         .start, .stop, .delete => {
-            const all = result.subcommand_args.?.getBool("all");
+            const all = result.subcommand_args.?.getOrBool("all", false);
             const ids = result.subcommand_args.?.getArray("id");
 
-            if (all == null and ids == null) {
+            if (!all and ids == null) {
                 try stdout.print("{s}: missing --all or --id argument\n", .{@tagName(cmd_name)});
                 try stdout.flush();
                 return error.Exit;
             }
-            if (all != null and ids != null) {
+            if (all and ids != null) {
                 try stdout.print("{s}: required one of --all or --id argument\n", .{@tagName(cmd_name)});
                 try stdout.flush();
                 return error.Exit;
             }
 
             const data = OtherCommandArgs{
-                .all = all,
                 .id = if (ids != null) try parseIds(gpa, u32, ids) else null,
             };
 
