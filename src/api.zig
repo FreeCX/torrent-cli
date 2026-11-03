@@ -4,9 +4,9 @@ const mem = std.mem;
 const http = std.http;
 const json = std.json;
 
-const rpc = @import("../rpc.zig");
+const rpc = @import("rpc.zig");
 
-const log = std.log.scoped(.core);
+const log = std.log.scoped(.api);
 
 // base json with custom result
 fn TorrentBase(T: type) type {

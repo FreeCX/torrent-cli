@@ -3,14 +3,7 @@ const Io = std.Io;
 
 const rpc = @import("rpc.zig");
 const arg = @import("arg.zig");
-
-const command = .{
-    .add = @import("command/add.zig"),
-    .delete = @import("command/delete.zig").delete,
-    .start = @import("command/start.zig").start,
-    .stop = @import("command/stop.zig").stop,
-    .status = @import("command/status.zig").status,
-};
+const cmd = @import("cmd.zig");
 
 const log = std.log.scoped(.app);
 
@@ -68,16 +61,16 @@ pub fn main(init: std.process.Init) !void {
     switch (arguments.command) {
         arg.Command.add => |params| {
             if (params.path) |path| {
-                try command.add.addPath(gpa, io, &client, stdout, path);
+                try cmd.addPath(gpa, io, &client, stdout, path);
             }
             if (params.magnet) |magnet| {
-                try command.add.addMagnet(gpa, &client, stdout, magnet);
+                try cmd.addMagnet(gpa, &client, stdout, magnet);
             }
             // TODO: nothing to do
         },
-        arg.Command.delete => |params| try command.delete(gpa, &client, stdout, params.id),
-        arg.Command.start => |params| try command.start(gpa, &client, stdout, params.id),
-        arg.Command.stop => |params| try command.stop(gpa, &client, stdout, params.id),
-        arg.Command.status => try command.status(gpa, &client, stdout),
+        arg.Command.delete => |params| try cmd.delete(gpa, &client, stdout, params.id),
+        arg.Command.start => |params| try cmd.start(gpa, &client, stdout, params.id),
+        arg.Command.stop => |params| try cmd.stop(gpa, &client, stdout, params.id),
+        arg.Command.status => try cmd.status(gpa, &client, stdout),
     }
 }
