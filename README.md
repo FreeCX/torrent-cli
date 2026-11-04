@@ -10,7 +10,6 @@ $ zig build --release=fast
 
 # How to use
 ```bash
-$ zig build run -- --help
 Simple transmission rpc client
 
 USAGE:
@@ -26,6 +25,7 @@ COMMANDS:
 OPTIONS:
     -i, --host <HOST>       Transmission host  [default: 127.0.0.1]
     -p, --port <INT>        Transmission port  [default: 9091]
+    -b, --buffer <UINT>     RPC buffer size  [default: 65536]
     -l, --level <STRING>    Log level  [choices: err, warn, info, debug]
     -h, --help              Print help
     -V, --version           Print version
