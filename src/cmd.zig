@@ -9,6 +9,11 @@ const log = std.log.scoped(.cmd);
 
 const asMB: f32 = 1024 * 1024;
 
+const fill_bar = "▮";
+const empty_bar = "⋅";
+const bar_size: usize = 10;
+var bar_buffer: [bar_size * @max(fill_bar.len, empty_bar.len)]u8 = undefined;
+
 fn duplicateOrAddSymbol(data: api.AddInfo) u8 {
     return if (data.is_duplicate) '!' else '+';
 }
@@ -23,13 +28,13 @@ fn statusAsSymbol(stat: api.Status) []const u8 {
     };
 }
 
-fn renderProgressBar(percent: u8, buffer: []u8) []u8 {
-    const filler = @divTrunc(percent, 10);
-    const spacer = 10 - filler;
-    var writer = Io.Writer.fixed(buffer);
-    _ = writer.splatBytes("▮", filler) catch {};
-    _ = writer.splatBytes("⋅", spacer) catch {};
-    return buffer[0..writer.end];
+fn renderProgressBar(percent: u8) []u8 {
+    const filler = @divTrunc(percent, bar_size);
+    const spacer = bar_size - filler;
+    var writer = Io.Writer.fixed(&bar_buffer);
+    _ = writer.splatBytes(fill_bar, filler) catch {};
+    _ = writer.splatBytes(empty_bar, spacer) catch {};
+    return bar_buffer[0..writer.end];
 }
 
 fn resolveFullPath(gpa: mem.Allocator, io: Io, path: []const u8, sub_path: []const u8) ![]u8 {
@@ -132,8 +137,6 @@ pub fn status(gpa: mem.Allocator, client: *rpc.Client, stdout: *Io.Writer) !void
     const stats = try api.torrentStatus(gpa, client, null);
     defer stats.deinit(gpa);
 
-    var bar_buffer: [32]u8 = undefined;
-
     for (stats.items) |torrent| {
         const percent_clamped = std.math.clamp(torrent.percent_done, 0.0, 1.0);
         const percent: u8 = @trunc(percent_clamped * 100);
@@ -143,7 +146,7 @@ pub fn status(gpa: mem.Allocator, client: *rpc.Client, stdout: *Io.Writer) !void
         try stdout.print("{d} | {s} | {s} {d:3}% | {d: >5.2}↓ {d: >5.2}↑ {d: >5.2}÷ | {s}\n", .{
             torrent.id,
             statusAsSymbol(torrent.status),
-            renderProgressBar(percent, &bar_buffer),
+            renderProgressBar(percent),
             percent,
             download,
             upload,
