@@ -7,6 +7,8 @@ const rpc = @import("rpc.zig");
 
 const log = std.log.scoped(.cmd);
 
+const asMB: f32 = 1024 * 1024;
+
 fn duplicateOrAddSymbol(data: api.AddInfo) u8 {
     return if (data.is_duplicate) '!' else '+';
 }
@@ -28,14 +30,6 @@ fn renderProgressBar(percent: u8, buffer: []u8) []u8 {
     _ = writer.splatBytes("▮", filler) catch {};
     _ = writer.splatBytes("⋅", spacer) catch {};
     return buffer[0..writer.end];
-}
-
-fn renderSpeedRate(value: u64, buffer: []u8) ![]u8 {
-    // simple variant of floor div
-    const divider = 1024 * 1024;
-    const a = value >> 20;
-    const b = ((value % divider) * 100) >> 20;
-    return try std.fmt.bufPrint(buffer, "{d:2}.{d:02}", .{ a, b });
 }
 
 fn resolveFullPath(gpa: mem.Allocator, io: Io, path: []const u8, sub_path: []const u8) ![]u8 {
@@ -133,24 +127,27 @@ pub fn start(gpa: mem.Allocator, client: *rpc.Client, stdout: *Io.Writer, ids: ?
     try stdout.flush();
 }
 
+// TODO: подумать над вариабельным форматом статуса
 pub fn status(gpa: mem.Allocator, client: *rpc.Client, stdout: *Io.Writer) !void {
     const stats = try api.torrentStatus(gpa, client, null);
     defer stats.deinit(gpa);
 
     var bar_buffer: [32]u8 = undefined;
-    var download_buffer: [16]u8 = undefined;
-    var upload_buffer: [16]u8 = undefined;
 
     for (stats.items) |torrent| {
         const percent_clamped = std.math.clamp(torrent.percent_done, 0.0, 1.0);
         const percent: u8 = @trunc(percent_clamped * 100);
-        try stdout.print("{d} | {s} | {s} {d:3}% | {s}↓ {s}↑ | {s}\n", .{
+        const download = @as(f32, @floatFromInt(torrent.rate_download)) / asMB;
+        const upload = @as(f32, @floatFromInt(torrent.rate_upload)) / asMB;
+
+        try stdout.print("{d} | {s} | {s} {d:3}% | {d: >5.2}↓ {d: >5.2}↑ {d: >5.2}÷ | {s}\n", .{
             torrent.id,
             statusAsSymbol(torrent.status),
             renderProgressBar(percent, &bar_buffer),
             percent,
-            try renderSpeedRate(torrent.rate_download, &download_buffer),
-            try renderSpeedRate(torrent.rate_upload, &upload_buffer),
+            download,
+            upload,
+            torrent.upload_ratio,
             torrent.name,
         });
     }

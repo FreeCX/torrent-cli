@@ -34,6 +34,7 @@ pub const StatusInfo = struct {
     percent_done: f64,
     rate_download: u64,
     rate_upload: u64,
+    upload_ratio: f64,
     status: Status,
 };
 pub const TorrentStatsList = struct {
@@ -71,7 +72,7 @@ const TorrentAddResponse = TorrentBase(TorrentAddResult);
 pub fn torrentStatus(gpa: mem.Allocator, client: *rpc.Client, ids: ?[]u32) !TorrentStatsList {
     const params = .{
         .ids = ids,
-        .fields = .{ "id", "name", "status", "rate_download", "rate_upload", "percent_done" },
+        .fields = .{ "id", "name", "status", "rate_download", "rate_upload", "percent_done", "upload_ratio" },
     };
 
     const response = try client.request("torrent_get", params);
