@@ -14,6 +14,15 @@ const empty_bar = "⋅";
 const bar_size: usize = 10;
 var bar_buffer: [bar_size * @max(fill_bar.len, empty_bar.len)]u8 = undefined;
 
+fn renderProgressBar(percent: u8) []u8 {
+    const filler = @divTrunc(percent, bar_size);
+    const spacer = bar_size - filler;
+    var writer = Io.Writer.fixed(&bar_buffer);
+    _ = writer.splatBytes(fill_bar, filler) catch {};
+    _ = writer.splatBytes(empty_bar, spacer) catch {};
+    return bar_buffer[0..writer.end];
+}
+
 fn duplicateOrAddSymbol(data: api.AddInfo) u8 {
     return if (data.is_duplicate) '!' else '+';
 }
@@ -26,15 +35,6 @@ fn statusAsSymbol(stat: api.Status) []const u8 {
         .Verifying => "⭯",
         else => "∅",
     };
-}
-
-fn renderProgressBar(percent: u8) []u8 {
-    const filler = @divTrunc(percent, bar_size);
-    const spacer = bar_size - filler;
-    var writer = Io.Writer.fixed(&bar_buffer);
-    _ = writer.splatBytes(fill_bar, filler) catch {};
-    _ = writer.splatBytes(empty_bar, spacer) catch {};
-    return bar_buffer[0..writer.end];
 }
 
 fn resolveFullPath(gpa: mem.Allocator, io: Io, path: []const u8, sub_path: []const u8) ![]u8 {
