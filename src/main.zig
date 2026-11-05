@@ -4,27 +4,11 @@ const Io = std.Io;
 const rpc = @import("rpc.zig");
 const arg = @import("arg.zig");
 const cmd = @import("cmd.zig");
+const logging = @import("logging.zig");
 
 const log = std.log.scoped(.app);
 
-// custom logging, because .log_level cannot be changed after compilation
-pub const std_options: std.Options = .{
-    .log_level = .debug,
-    .logFn = logFn,
-};
-// customizable log level
-var log_level: std.log.Level = .err;
-
-fn logFn(
-    comptime message_level: std.log.Level,
-    comptime scope: @TypeOf(.enum_literal),
-    comptime format: []const u8,
-    args: anytype,
-) void {
-    if (@backingInt(message_level) <= @backingInt(log_level)) {
-        std.log.defaultLog(message_level, scope, format, args);
-    }
-}
+pub const std_options = logging.std_options;
 
 // TODO: better error handling
 pub fn main(init: std.process.Init) !void {
@@ -41,7 +25,7 @@ pub fn main(init: std.process.Init) !void {
     };
     defer arguments.deinit(gpa);
 
-    log_level = arguments.level;
+    logging.level = arguments.level;
 
     const read_buffer = try gpa.alloc(u8, arguments.buffer_size);
     defer gpa.free(read_buffer);
