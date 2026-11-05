@@ -47,8 +47,26 @@ fn resolveFullPath(gpa: mem.Allocator, io: Io, path: []const u8, sub_path: []con
     return resolved;
 }
 
+fn addOneFile(
+    gpa: mem.Allocator,
+    io: Io,
+    stdout: *Io.Writer,
+    client: *rpc.Client,
+    path: []const u8,
+    sub_path: []const u8,
+) !void {
+    const resolved = try resolveFullPath(gpa, io, path, sub_path);
+    defer gpa.free(resolved);
+
+    const response = try api.torrentAdd(gpa, client, resolved, null);
+    defer response.deinit(gpa);
+
+    try stdout.print("{c} | {d} | {s}\n", .{ duplicateOrAddSymbol(response), response.id, response.name });
+    try stdout.flush();
+}
+
 // walk over dir and add *.torrent files
-fn addFromDirectory(gpa: mem.Allocator, io: Io, client: *rpc.Client, stdout: *Io.Writer, path: []const u8) !void {
+fn addFromDirectory(gpa: mem.Allocator, io: Io, stdout: *Io.Writer, client: *rpc.Client, path: []const u8) !void {
     const dir = try Io.Dir.cwd().openDir(
         io,
         path,
@@ -61,46 +79,25 @@ fn addFromDirectory(gpa: mem.Allocator, io: Io, client: *rpc.Client, stdout: *Io
 
     while (try walker.next(io)) |entry| {
         if (mem.endsWith(u8, entry.basename, ".torrent")) {
-            const resolved = try resolveFullPath(gpa, io, path, entry.path);
-            defer gpa.free(resolved);
-
-            // TODO: делать вне функции?
-            const response = try api.torrentAdd(gpa, client, resolved, null);
-            defer response.deinit(gpa);
-
-            try stdout.print(
-                "{c} | {d} | {s}\n",
-                .{ duplicateOrAddSymbol(response), response.id, response.name },
-            );
+            try addOneFile(gpa, io, stdout, client, path, entry.path);
         }
     }
     try stdout.flush();
 }
 
-fn addOneFile(gpa: mem.Allocator, io: Io, client: *rpc.Client, stdout: *Io.Writer, path: []const u8) !void {
-    const resolved = try resolveFullPath(gpa, io, ".", path);
-    defer gpa.free(resolved);
-
-    const response = try api.torrentAdd(gpa, client, resolved, null);
-    defer response.deinit(gpa);
-
-    try stdout.print("{c} | {d} | {s}\n", .{ duplicateOrAddSymbol(response), response.id, response.name });
-    try stdout.flush();
-}
-
 // TODO: process ErrorResponse?
-pub fn addPath(gpa: mem.Allocator, io: Io, client: *rpc.Client, stdout: *Io.Writer, path: []const u8) !void {
+pub fn addPath(gpa: mem.Allocator, io: Io, stdout: *Io.Writer, client: *rpc.Client, path: []const u8) !void {
     const stat = try Io.Dir.cwd().statFile(io, path, .{});
     if (stat.kind == .directory) {
-        try addFromDirectory(gpa, io, client, stdout, path);
+        try addFromDirectory(gpa, io, stdout, client, path);
         return;
     }
 
-    try addOneFile(gpa, io, client, stdout, path);
+    try addOneFile(gpa, io, stdout, client, ".", path);
 }
 
 // TODO: process ErrorResponse?
-pub fn addMagnet(gpa: mem.Allocator, client: *rpc.Client, stdout: *Io.Writer, magnet: []const u8) !void {
+pub fn addMagnet(gpa: mem.Allocator, stdout: *Io.Writer, client: *rpc.Client, magnet: []const u8) !void {
     const response = try api.torrentAdd(gpa, client, magnet, null);
     defer response.deinit(gpa);
 
@@ -108,7 +105,7 @@ pub fn addMagnet(gpa: mem.Allocator, client: *rpc.Client, stdout: *Io.Writer, ma
     try stdout.flush();
 }
 
-pub fn delete(gpa: mem.Allocator, client: *rpc.Client, stdout: *Io.Writer, ids: ?[]u32) !void {
+pub fn delete(gpa: mem.Allocator, stdout: *Io.Writer, client: *rpc.Client, ids: ?[]u32) !void {
     const stats = try api.torrentStatus(gpa, client, ids);
     defer stats.deinit(gpa);
 
@@ -120,7 +117,7 @@ pub fn delete(gpa: mem.Allocator, client: *rpc.Client, stdout: *Io.Writer, ids: 
     try stdout.flush();
 }
 
-pub fn start(gpa: mem.Allocator, client: *rpc.Client, stdout: *Io.Writer, ids: ?[]u32) !void {
+pub fn start(gpa: mem.Allocator, stdout: *Io.Writer, client: *rpc.Client, ids: ?[]u32) !void {
     const stats = try api.torrentStatus(gpa, client, ids);
     defer stats.deinit(gpa);
 
@@ -133,7 +130,7 @@ pub fn start(gpa: mem.Allocator, client: *rpc.Client, stdout: *Io.Writer, ids: ?
 }
 
 // TODO: подумать над вариабельным форматом статуса
-pub fn status(gpa: mem.Allocator, client: *rpc.Client, stdout: *Io.Writer) !void {
+pub fn status(gpa: mem.Allocator, stdout: *Io.Writer, client: *rpc.Client) !void {
     const stats = try api.torrentStatus(gpa, client, null);
     defer stats.deinit(gpa);
 
@@ -157,7 +154,7 @@ pub fn status(gpa: mem.Allocator, client: *rpc.Client, stdout: *Io.Writer) !void
     try stdout.flush();
 }
 
-pub fn stop(gpa: mem.Allocator, client: *rpc.Client, stdout: *Io.Writer, ids: ?[]u32) !void {
+pub fn stop(gpa: mem.Allocator, stdout: *Io.Writer, client: *rpc.Client, ids: ?[]u32) !void {
     const stats = try api.torrentStatus(gpa, client, ids);
     defer stats.deinit(gpa);
 

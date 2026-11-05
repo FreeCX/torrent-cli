@@ -61,16 +61,16 @@ pub fn main(init: std.process.Init) !void {
     switch (arguments.command) {
         arg.Command.add => |params| {
             if (params.path) |path| {
-                try cmd.addPath(gpa, io, &client, stdout, path);
+                try cmd.addPath(gpa, io, stdout, &client, path);
             }
             if (params.magnet) |magnet| {
-                try cmd.addMagnet(gpa, &client, stdout, magnet);
+                try cmd.addMagnet(gpa, stdout, &client, magnet);
             }
             // TODO: nothing to do
         },
-        arg.Command.delete => |params| try cmd.delete(gpa, &client, stdout, params.id),
-        arg.Command.start => |params| try cmd.start(gpa, &client, stdout, params.id),
-        arg.Command.stop => |params| try cmd.stop(gpa, &client, stdout, params.id),
-        arg.Command.status => try cmd.status(gpa, &client, stdout),
+        arg.Command.delete => |params| try cmd.delete(gpa, stdout, &client, params.id),
+        arg.Command.start => |params| try cmd.start(gpa, stdout, &client, params.id),
+        arg.Command.stop => |params| try cmd.stop(gpa, stdout, &client, params.id),
+        arg.Command.status => try cmd.status(gpa, stdout, &client),
     }
 }
