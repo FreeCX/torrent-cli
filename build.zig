@@ -13,8 +13,10 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .imports = &.{},
+            .strip = if (optimize != .debug) true else false,
         }),
     });
+    exe.lto = if (optimize != .debug) .full else .none;
     exe.root_module.addImport("build_zig_zon", b.createModule(
         .{ .root_source_file = b.path("build.zig.zon") },
     ));
@@ -32,6 +34,5 @@ pub fn build(b: *std.Build) void {
     });
     const run_exe_tests = b.addRunArtifact(exe_tests);
     const test_step = b.step("test", "Run tests");
-    // test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 }
